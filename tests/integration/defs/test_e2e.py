@@ -2024,7 +2024,7 @@ def test_ptp_quickstart_multimodal(llm_root, llm_venv, model_name, model_path,
                     "large", "dome", "yosemite", "landmark", "rock", "road",
                     "formation"
                 ],
-                ["highway", "traffic", "vehicles", "bus", "police"],
+                ["highway", "traffic", "vehicles", "lane", "road"],
             ],
             "video": [
                 ["woman", "neon", "night", "jacket", "wet"],

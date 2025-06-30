@@ -1230,11 +1230,15 @@ class TestFunctional(unittest.TestCase):
                 else:
                     attention_packed_mask = None
                 if attention_type == 'gpt2_attention':
-                    torch_output, torch_present = attention(
+                    # gpt2 uses DynamicCache
+                    torch_present = DynamicCache.from_legacy_cache(
+                        torch_present)
+                    torch_output = attention(
                         input_tensor,
-                        layer_past=None,
+                        past_key_value=torch_present,
                         use_cache=True,
-                        attention_mask=attention_mask)
+                        attention_mask=attention_mask)[0]
+                    torch_present = torch_present.to_legacy_cache()
                 elif attention_type == 'llama_attention':
                     position_embeddings = rotary_emb(input_tensor, position_ids)
                     attention_mask = attention_mask + AttentionMaskConverter._make_causal_mask(
@@ -1277,7 +1281,7 @@ class TestFunctional(unittest.TestCase):
 
                 torch.cuda.synchronize()
 
-                if attention_type == 'llama_attention':
+                if attention_type in ['llama_attention', 'gpt2_attention']:
                     kv_dequant_scale, kv_quant_scale = get_kv_quant_scale(
                         torch_present[0])
                 else:
@@ -1322,7 +1326,7 @@ class TestFunctional(unittest.TestCase):
                         torch_output[:, :in_len // 2, :].to(
                             torch.float32).cpu().numpy(),
                         atol=5e-3)
-                if attention_type == 'llama_attention':
+                if attention_type in ['llama_attention', 'gpt2_attention']:
                     verify_kv_cache(torch_present[0])
                 else:
                     verify_kv_cache(torch_present)
@@ -1374,11 +1378,15 @@ class TestFunctional(unittest.TestCase):
 
                 # torch execution
                 if attention_type == 'gpt2_attention':
-                    torch_output, torch_present = attention(
+                    # gpt2 uses DynamicCache
+                    torch_present = DynamicCache.from_legacy_cache(
+                        torch_present)
+                    torch_output = attention(
                         input_tensor,
-                        layer_past=torch_present,
+                        past_key_value=torch_present,
                         use_cache=True,
-                        attention_mask=attention_mask)
+                        attention_mask=attention_mask)[0]
+                    torch_present = torch_present.to_legacy_cache()
                 elif attention_type == 'llama_attention':
                     position_embeddings = rotary_emb(input_tensor, position_ids)
                     attention_mask = attention_mask + AttentionMaskConverter._make_causal_mask(
