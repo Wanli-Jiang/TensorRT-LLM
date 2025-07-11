@@ -121,20 +121,24 @@ class MLP(Module):
         self.inner_layernorm = LayerNorm(ffn_hidden_size, dtype=dtype,
                                          eps=eps) if inner_layernorm else None
 
-        self.fc = ColumnLinear(hidden_size,
-                               fc_output_size,
-                               bias=bias,
-                               dtype=dtype,
-                               tp_group=tp_group,
-                               tp_size=tp_size,
-                               gather_output=False)
-        self.proj = RowLinear(ffn_hidden_size,
-                              hidden_size,
-                              bias=bias,
-                              dtype=dtype,
-                              tp_group=tp_group,
-                              tp_size=tp_size,
-                              is_expert=is_expert)
+        self.fc = ColumnLinear(
+            hidden_size,
+            fc_output_size,
+            bias=bias,
+            dtype=dtype,
+            tp_group=tp_group,
+            tp_size=tp_size,
+            # TODO (williamj): disable it once self.proj can be sharded correctly.
+            gather_output=True)
+        self.proj = RowLinear(
+            ffn_hidden_size,
+            hidden_size,
+            bias=bias,
+            dtype=dtype,
+            # TODO (williamj): use tensor parallel for self.proj.
+            tp_group=1,
+            tp_size=1,
+            is_expert=is_expert)
 
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
