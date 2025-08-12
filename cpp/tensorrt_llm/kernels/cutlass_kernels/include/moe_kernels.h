@@ -448,14 +448,14 @@ public:
         = 0;
     virtual std::vector<cutlass_extensions::CutlassGemmConfig> getTactics() = 0;
 
-    virtual void runMoe(void const* input_activations, void const* input_sf, int const* token_selected_experts,
-        float const* token_final_scales, void const* fc1_expert_weights, void const* fc1_expert_biases,
-        ActivationParams fc1_activation_type, void const* fc2_expert_weights, void const* fc2_expert_biases,
-        QuantParams quant_params, int64_t const num_rows, int64_t const hidden_size, int64_t const inter_size,
-        int const num_experts, int const experts_per_token, char* workspace_ptr, void* final_output,
-        int* unpermuted_row_to_permuted_row, MOEParallelismConfig parallelism_config, bool const enable_alltoall,
-        bool use_lora, LoraParams& lora_params, bool use_deepseek_fp8_block_scale, bool min_latency_mode,
-        MoeMinLatencyParams& min_latency_params, cudaStream_t stream)
+    virtual void runMoe(void const* input_activations, void const* input_sf, bool const swizzled_input_sf,
+        int const* token_selected_experts, float const* token_final_scales, void const* fc1_expert_weights,
+        void const* fc1_expert_biases, ActivationParams fc1_activation_type, void const* fc2_expert_weights,
+        void const* fc2_expert_biases, QuantParams quant_params, int64_t const num_rows, int64_t const hidden_size,
+        int64_t const inter_size, int const num_experts, int const experts_per_token, char* workspace_ptr,
+        void* final_output, int* unpermuted_row_to_permuted_row, MOEParallelismConfig parallelism_config,
+        bool const enable_alltoall, bool use_lora, LoraParams& lora_params, bool use_deepseek_fp8_block_scale,
+        bool min_latency_mode, MoeMinLatencyParams& min_latency_params, cudaStream_t stream)
         = 0;
 
     // Aliases for profiling the gemms
@@ -495,7 +495,8 @@ public:
         void const* weights1, void const* weights2, float const* alpha_scale_flat1, float const* alpha_scale_flat2,
         TmaWarpSpecializedGroupedGemmInput::ElementSF const* fp4_act_flat1,
         TmaWarpSpecializedGroupedGemmInput::ElementSF const* fp4_act_flat2, QuantParams quant_params, void const* bias1,
-        void const* bias2, void* gemm1_output, void* gemm2_output, cudaStream_t stream)
+        void const* bias2, void* gemm1_output, void* gemm2_output, float const* router_scales,
+        int const* permuted_row_to_unpermuted_row, cudaStream_t stream)
         = 0;
 
     virtual std::pair<TmaWarpSpecializedGroupedGemmInput, TmaWarpSpecializedGroupedGemmInput>
@@ -512,13 +513,13 @@ public:
     virtual size_t getGemmWorkspaceSize(int num_experts_per_node) const = 0;
 
     bool is_profiler = false;
-    bool use_deterministic_hopper_reduce_ = false;
+    bool use_fused_finalize_ = true;
 };
 
 // Assumes inputs activations are row major. Weights need to be preprocessed by th_op/weight_quantize.cc .
 // Nested in a class to avoid multiple calls to cudaGetDeviceProperties as this call can be expensive.
 // Avoid making several duplicates of this class.
-template <typename T,                   /*The type used for activations*/
+template <typename T,                   /* The type used for activations */
     typename WeightType,                /* The type for the MoE weights */
     typename OutputType = T,            /* The type for the MoE final output */
     typename InputType = T,             /* The type for the MoE input */
@@ -603,14 +604,14 @@ public:
         return RunnerType::getConfigs(sm);
     }
 
-    void runMoe(void const* input_activations, void const* input_sf, int const* token_selected_experts,
-        float const* token_final_scales, void const* fc1_expert_weights, void const* fc1_expert_biases,
-        ActivationParams fc1_activation_type, void const* fc2_expert_weights, void const* fc2_expert_biases,
-        QuantParams quant_params, int64_t const num_rows, int64_t const hidden_size, int64_t const inter_size,
-        int const num_experts, int const experts_per_token, char* workspace_ptr, void* final_output,
-        int* unpermuted_row_to_permuted_row, MOEParallelismConfig parallelism_config, bool const enable_alltoall,
-        bool use_lora, LoraParams& lora_params, bool use_deepseek_fp8_block_scale, bool min_latency_mode,
-        MoeMinLatencyParams& min_latency_params, cudaStream_t stream) override;
+    void runMoe(void const* input_activations, void const* input_sf, bool const swizzled_input_sf,
+        int const* token_selected_experts, float const* token_final_scales, void const* fc1_expert_weights,
+        void const* fc1_expert_biases, ActivationParams fc1_activation_type, void const* fc2_expert_weights,
+        void const* fc2_expert_biases, QuantParams quant_params, int64_t const num_rows, int64_t const hidden_size,
+        int64_t const inter_size, int const num_experts, int const experts_per_token, char* workspace_ptr,
+        void* final_output, int* unpermuted_row_to_permuted_row, MOEParallelismConfig parallelism_config,
+        bool const enable_alltoall, bool use_lora, LoraParams& lora_params, bool use_deepseek_fp8_block_scale,
+        bool min_latency_mode, MoeMinLatencyParams& min_latency_params, cudaStream_t stream) override;
 
     // We make these GEMM1 & GEMM2 static because they need to be stateless for the profiler to work
     static void gemm1(MoeGemmRunner<T, WeightType, OutputType, ScaleBiasType>& gemm_runner,
@@ -709,7 +710,8 @@ public:
         void const* weights1, void const* weights2, float const* alpha_scale_flat1, float const* alpha_scale_flat2,
         TmaWarpSpecializedGroupedGemmInput::ElementSF const* fp4_act_flat1,
         TmaWarpSpecializedGroupedGemmInput::ElementSF const* fp4_act_flat2, QuantParams quant_params, void const* bias1,
-        void const* bias2, void* gemm1_output, void* gemm2_output, cudaStream_t stream) override
+        void const* bias2, void* gemm1_output, void* gemm2_output, float const* router_scales,
+        int const* permuted_row_to_unpermuted_row, cudaStream_t stream) override
     {
         return Self::computeStridesTmaWarpSpecialized(expert_first_token_offset, layout_info1, layout_info2, num_tokens,
             expanded_num_tokens, gemm1_n, gemm1_k, gemm2_n, gemm2_k, num_experts_per_node,
@@ -718,7 +720,8 @@ public:
             alpha_scale_flat1, alpha_scale_flat2, fp4_act_flat1, fp4_act_flat2, quant_params,
             reinterpret_cast<ScaleBiasType const*>(bias1), reinterpret_cast<ScaleBiasType const*>(bias2),
             reinterpret_cast<UnfusedGemmOutputType*>(gemm1_output),
-            reinterpret_cast<UnfusedGemmOutputType*>(gemm2_output), stream);
+            reinterpret_cast<UnfusedGemmOutputType*>(gemm2_output), router_scales, permuted_row_to_unpermuted_row,
+            stream);
     }
 
     std::pair<TmaWarpSpecializedGroupedGemmInput, TmaWarpSpecializedGroupedGemmInput>
@@ -760,7 +763,8 @@ private:
         float const* alpha_scale_flat2, TmaWarpSpecializedGroupedGemmInput::ElementSF const* fp4_act_flat1,
         TmaWarpSpecializedGroupedGemmInput::ElementSF const* fp4_act_flat2, QuantParams quant_params,
         ScaleBiasType const* bias1, ScaleBiasType const* bias2, UnfusedGemmOutputType* gemm1_output,
-        UnfusedGemmOutputType* gemm2_output, cudaStream_t stream);
+        UnfusedGemmOutputType* gemm2_output, float const* router_scales, int const* permuted_row_to_unpermuted_row,
+        cudaStream_t stream);
     static std::pair<TmaWarpSpecializedGroupedGemmInput, TmaWarpSpecializedGroupedGemmInput>
     computeStridesTmaWarpSpecializedLowLatency(TmaWarpSpecializedGroupedGemmInput layout_info1,
         TmaWarpSpecializedGroupedGemmInput layout_info2, int64_t num_tokens, int64_t gemm1_n, int64_t gemm1_k,
@@ -790,8 +794,8 @@ private:
 
     bool mayHaveFinalizeFused() const
     {
-        return moe_gemm_runner_.supportsTmaWarpSpecialized() && moe_gemm_runner_.getSM() == 90
-            && !use_deterministic_hopper_reduce_ && !use_w4_groupwise;
+        return moe_gemm_runner_.supportsTmaWarpSpecialized() && moe_gemm_runner_.getSM() >= 90 && use_fused_finalize_
+            && !use_w4_groupwise;
     }
 
     // TODO: This should eventually take the quant params to give more flexibility

@@ -336,7 +336,7 @@ class TorchSampler(Sampler):
         if request.py_draft_logits is None:
             new_token = add_token(request, new_tokens, beam=self.BEAM)
             stop = self._handle_stop_criteria(request, new_token)
-            if stop or len(request.py_draft_tokens) == 0:
+            if stop or get_draft_token_length(request) == 0:
                 return 0
             num_accepted = 0
 
@@ -360,10 +360,10 @@ class TorchSampler(Sampler):
                                     request.py_draft_logits[0],
                                     generator=generator)
             target_probs = request.py_target_probs
-            p = draft_probs[torch.arange(len(request.py_draft_tokens)),
+            p = draft_probs[torch.arange(get_draft_token_length(request)),
                             request.py_draft_tokens]
             q = target_probs[:-1]
-            q = q[torch.arange(len(request.py_draft_tokens)),
+            q = q[torch.arange(get_draft_token_length(request)),
                   request.py_draft_tokens]
             accept_probs = torch.minimum(torch.ones(()), q / p)
             # Use deterministic random generation for multi-GPU consistency
@@ -374,7 +374,7 @@ class TorchSampler(Sampler):
             sample_last = True
             stop = False
             if rejected_indices.numel() == 0:
-                num_initially_accepted = len(request.py_draft_tokens)
+                num_initially_accepted = get_draft_token_length(request)
                 sample_last = False
             else:
                 num_initially_accepted = rejected_indices[0].item()
@@ -548,8 +548,8 @@ class TorchSampler(Sampler):
         no_draft_tokens = len(requests) == sum_steps
         fast_path = not self.enable_mixed_sampler and no_draft_tokens and gen_logits_host is None and log_probs_host is None
 
-        seq_slots = torch.as_tensor([r.py_seq_slot for r in requests])
-        seq_slots = seq_slots.to(device="cuda", non_blocking=True)
+        seq_slots_host = torch.as_tensor([r.py_seq_slot for r in requests])
+        seq_slots = seq_slots_host.to(device="cuda", non_blocking=True)
 
         if fast_path:
             logits = raw_logits[:len(requests)]
@@ -575,7 +575,7 @@ class TorchSampler(Sampler):
             logits = raw_logits[:sum_steps]
             # Collect steps per request for batched strategy
             steps_per_request = [
-                1 + len(req.py_draft_tokens) for req in requests
+                1 + get_draft_token_length(req) for req in requests
             ]
             logits = self._apply_embedding_bias(logits, requests,
                                                 steps_per_request)
@@ -585,7 +585,7 @@ class TorchSampler(Sampler):
 
         offset = 0
         for i, (strategy, slot, steps, request) in enumerate(
-                zip(strategies, seq_slots, num_steps, requests)):
+                zip(strategies, seq_slots_host, num_steps, requests)):
             input_slice = slice(offset, offset + steps)
             logits = raw_logits[input_slice]
 

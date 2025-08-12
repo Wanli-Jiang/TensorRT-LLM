@@ -334,12 +334,13 @@ void MixtureOfExpertsPlugin::init()
             static_cast<int>(mType), static_cast<int>(mWeightType), static_cast<int>(mOutputType));
     }
 
-    mMOERunner->use_deterministic_hopper_reduce_ = mExpertsPerToken > 2 && mUseDeterministicKernels;
+    mMOERunner->use_fused_finalize_
+        = (mExpertsPerToken < 3 || !mUseDeterministicKernels) && !getEnvMOEDisableFinalizeFusion();
 
     mGemmId1 = GemmIDMoe{1, mNumExperts, mExpertsPerToken, mParallelismConfig, mExpertHiddenSize, mExpertInterSize,
-        mGroupSize, mActivationType, mType, mWeightType, mQuantMode, mMOERunner->use_deterministic_hopper_reduce_};
+        mGroupSize, mActivationType, mType, mWeightType, mQuantMode, !mMOERunner->use_fused_finalize_};
     mGemmId2 = GemmIDMoe{2, mNumExperts, mExpertsPerToken, mParallelismConfig, mExpertHiddenSize, mExpertInterSize,
-        mGroupSize, mActivationType, mType, mWeightType, mQuantMode, mMOERunner->use_deterministic_hopper_reduce_};
+        mGroupSize, mActivationType, mType, mWeightType, mQuantMode, !mMOERunner->use_fused_finalize_};
     mGemmProfiler->setMaxProfileM(16384 * mNumExperts / mExpertsPerToken);
 
     if (hasLora())
@@ -957,7 +958,7 @@ int MixtureOfExpertsPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     MoeMinLatencyParams min_latency_params{};
     mMOERunner->setTactic(gemm1, gemm2);
 #ifdef USING_OSS_CUTLASS_MOE_GEMM
-    mMOERunner->runMoe(inputs[getInputTensorIndex()], nullptr,
+    mMOERunner->runMoe(inputs[getInputTensorIndex()], nullptr, true,
         static_cast<int const*>(inputs[getTokenSelectedExpertsIndex()]),
         hasFinalScales() ? static_cast<float const*>(inputs[getTokenFinalScalesIndex()]) : nullptr,
         inputs[getExpertWeights1Index()], hasBias() ? inputs[getExpertBias1Index()] : nullptr,
@@ -969,7 +970,7 @@ int MixtureOfExpertsPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
         /*enable_alltoall=*/false, hasLora(), lora_params, /*use_deepseek_fp8_block_scale=*/false,
         /*min_latency_mode=*/false, min_latency_params, stream);
 #else
-    mMOERunner->runMoe(inputs[getInputTensorIndex()], nullptr,
+    mMOERunner->runMoe(inputs[getInputTensorIndex()], nullptr, true,
         static_cast<int const*>(inputs[getTokenSelectedExpertsIndex()]),
         hasFinalScales() ? static_cast<float const*>(inputs[getTokenFinalScalesIndex()]) : nullptr,
         inputs[getExpertWeights1Index()], hasBias() ? inputs[getExpertBias1Index()] : nullptr,

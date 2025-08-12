@@ -95,7 +95,8 @@ public:
     };
 
     FusedMoeRunner(c10::ScalarType activation_dtype, c10::ScalarType weight_dtype, c10::ScalarType output_dtype,
-        bool use_deepseek_fp8_block_scale, bool use_w4_group_scaling, bool use_mxfp8_act_scaling)
+        bool use_deepseek_fp8_block_scale, bool use_w4_group_scaling, bool use_mxfp8_act_scaling,
+        bool use_fused_finalize)
     {
         mActivationDtype = activation_dtype;
         mWeightDtype = weight_dtype;
@@ -103,6 +104,7 @@ public:
         mUseDeepSeekFP8BlockScaling = use_deepseek_fp8_block_scale;
         mUseW4GroupScaling = use_w4_group_scaling;
         mUseMxfp8ActScaling = use_mxfp8_act_scaling;
+        mUseFusedFinalize = use_fused_finalize;
         mInnerDimMultiplier = 1;
 
         // keep consistent with cpp/tensorrt_llm/plugins/mixtureOfExperts/mixtureOfExpertsPlugin.cpp
@@ -213,6 +215,8 @@ public:
                     << ", Output: " << torch::toString(mOutputDtype));
         }
 
+        mKernelRunner->use_fused_finalize_ = mUseFusedFinalize;
+
         mProfiler = std::make_shared<kernels::GemmProfilerBackend>();
         mAllProfiles = mKernelRunner->getTactics();
     }
@@ -235,11 +239,11 @@ public:
         torch::optional<torch::Tensor> const& fc1_expert_biases, torch::Tensor const& fc2_expert_weights,
         torch::optional<torch::Tensor> const& fc2_expert_biases,
         torch::optional<c10::ArrayRef<torch::Tensor>> const& quant_scales,
-        torch::optional<torch::Tensor> const& input_sf, torch::optional<torch::Tensor> const& swiglu_alpha,
-        torch::optional<torch::Tensor> const& swiglu_beta, torch::optional<torch::Tensor> const& swiglu_limit,
-        int64_t const tp_size, int64_t const tp_rank, int64_t const ep_size, int64_t const ep_rank,
-        int64_t const cluster_size, int64_t const cluster_rank, bool const enable_alltoall, bool min_latency_mode,
-        torch::optional<c10::ArrayRef<int64_t>> const& profile_ids)
+        torch::optional<torch::Tensor> const& input_sf, bool const swizzled_input_sf,
+        torch::optional<torch::Tensor> const& swiglu_alpha, torch::optional<torch::Tensor> const& swiglu_beta,
+        torch::optional<torch::Tensor> const& swiglu_limit, int64_t const tp_size, int64_t const tp_rank,
+        int64_t const ep_size, int64_t const ep_rank, int64_t const cluster_size, int64_t const cluster_rank,
+        bool const enable_alltoall, bool min_latency_mode, torch::optional<c10::ArrayRef<int64_t>> const& profile_ids)
     {
         std::lock_guard<std::mutex> lock(mMutex);
         // Free the profile workspace to save memory
@@ -378,7 +382,7 @@ public:
         ::tensorrt_llm::kernels::LoraParams lora_params{};
 #ifdef USING_OSS_CUTLASS_MOE_GEMM
         mKernelRunner->runMoe(input.const_data_ptr(),
-            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr,
+            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr, swizzled_input_sf,
             reinterpret_cast<int const*>(token_selected_experts.const_data_ptr()),
             token_final_scales.has_value() ? reinterpret_cast<float const*>(token_final_scales.value().const_data_ptr())
                                            : nullptr,
@@ -392,7 +396,7 @@ public:
             mUseDeepSeekFP8BlockScaling, min_latency_mode, min_latency_params, stream);
 #else
         mKernelRunner->runMoe(input.const_data_ptr(),
-            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr,
+            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr, swizzled_input_sf,
             reinterpret_cast<int const*>(token_selected_experts.const_data_ptr()),
             token_final_scales.has_value() ? reinterpret_cast<float const*>(token_final_scales.value().const_data_ptr())
                                            : nullptr,
@@ -414,11 +418,11 @@ public:
         torch::Tensor const& fc1_expert_weights, torch::optional<torch::Tensor> const& fc1_expert_biases,
         torch::Tensor const& fc2_expert_weights, torch::optional<torch::Tensor> const& fc2_expert_biases,
         torch::optional<c10::ArrayRef<torch::Tensor>> const& quant_scales,
-        torch::optional<torch::Tensor> const& input_sf, torch::optional<torch::Tensor> const& swiglu_alpha,
-        torch::optional<torch::Tensor> const& swiglu_beta, torch::optional<torch::Tensor> const& swiglu_limit,
-        int64_t const tp_size, int64_t const tp_rank, int64_t const ep_size, int64_t const ep_rank,
-        int64_t const cluster_size, int64_t const cluster_rank, bool const enable_alltoall, bool min_latency_mode,
-        torch::optional<c10::ArrayRef<int64_t>> const& profile_ids)
+        torch::optional<torch::Tensor> const& input_sf, bool const swizzled_input_sf,
+        torch::optional<torch::Tensor> const& swiglu_alpha, torch::optional<torch::Tensor> const& swiglu_beta,
+        torch::optional<torch::Tensor> const& swiglu_limit, int64_t const tp_size, int64_t const tp_rank,
+        int64_t const ep_size, int64_t const ep_rank, int64_t const cluster_size, int64_t const cluster_rank,
+        bool const enable_alltoall, bool min_latency_mode, torch::optional<c10::ArrayRef<int64_t>> const& profile_ids)
     {
         std::lock_guard<std::mutex> lock(mMutex);
 
@@ -535,7 +539,7 @@ public:
         ::tensorrt_llm::kernels::LoraParams lora_params{};
 #ifdef USING_OSS_CUTLASS_MOE_GEMM
         mKernelRunner->runMoe(input.const_data_ptr(),
-            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr,
+            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr, swizzled_input_sf,
             reinterpret_cast<int const*>(token_selected_experts.const_data_ptr()),
             token_final_scales.has_value() ? reinterpret_cast<float const*>(token_final_scales.value().const_data_ptr())
                                            : nullptr,
@@ -549,7 +553,7 @@ public:
             mUseDeepSeekFP8BlockScaling, min_latency_mode, min_latency_params, stream);
 #else
         mKernelRunner->runMoe(input.const_data_ptr(),
-            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr,
+            input_sf.has_value() ? input_sf.value().const_data_ptr() : nullptr, swizzled_input_sf,
             reinterpret_cast<int const*>(token_selected_experts.const_data_ptr()),
             token_final_scales.has_value() ? reinterpret_cast<float const*>(token_final_scales.value().const_data_ptr())
                                            : nullptr,
@@ -674,6 +678,7 @@ private:
     bool mUseDeepSeekFP8BlockScaling = false;
     bool mUseW4GroupScaling = false;
     bool mUseMxfp8ActScaling = false;
+    bool mUseFusedFinalize = true;
 
     using Profile = tensorrt_llm::cutlass_extensions::CutlassGemmConfig;
     std::vector<Profile> mAllProfiles;
@@ -1045,7 +1050,7 @@ private:
 TORCH_LIBRARY(trtllm, m)
 {
     m.class_<torch_ext::FusedMoeRunner>("FusedMoeRunner")
-        .def(torch::init<c10::ScalarType, c10::ScalarType, c10::ScalarType, bool, bool, bool>())
+        .def(torch::init<c10::ScalarType, c10::ScalarType, c10::ScalarType, bool, bool, bool, bool>())
         .def("run_gemm_profile", &torch_ext::FusedMoeRunner::runGemmProfile)
         .def("get_tactic_num", &torch_ext::FusedMoeRunner::getTacticNum)
         .def("run_moe", &torch_ext::FusedMoeRunner::runMoe)
