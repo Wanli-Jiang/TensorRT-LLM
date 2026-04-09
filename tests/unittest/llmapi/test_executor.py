@@ -345,8 +345,11 @@ def test_abort_on_GenerationResultBase():
 
 
 def test_abort_on_DetokenizedGenerationResultBase():
-    """DetokenizedGenerationResultBase inherits abort() so postprocess workers
-    can call it without AttributeError (NVBug 5955173)."""
+    """Test abort() on DetokenizedGenerationResultBase.
+
+    DetokenizedGenerationResultBase inherits abort() so postprocess workers
+    can call it without AttributeError (NVBug 5955173).
+    """
     sampling_params = SamplingParams(max_tokens=4)
     result = DetokenizedGenerationResultBase(id=1,
                                              sampling_params=sampling_params)
@@ -359,8 +362,11 @@ def test_abort_on_DetokenizedGenerationResultBase():
 
 
 def test_PostprocWorker_Output_should_abort():
-    """PostprocWorker.Output carries should_abort flag for worker-to-main-thread
-    abort signal propagation."""
+    """Test PostprocWorker.Output should_abort flag.
+
+    PostprocWorker.Output carries should_abort flag for worker-to-main-thread
+    abort signal propagation.
+    """
     out_default = PostprocWorker.Output(client_id=0, res=None, is_final=False)
     assert out_default.should_abort is False
 
@@ -372,8 +378,11 @@ def test_PostprocWorker_Output_should_abort():
 
 
 def test_handle_response_propagates_should_abort():
-    """When a PostprocWorker.Output has should_abort=True, _handle_response
-    on the main-thread GenerationResult calls abort() (NVBug 5955173)."""
+    """Test _handle_response propagates should_abort flag.
+
+    When a PostprocWorker.Output has should_abort=True, _handle_response
+    on the main-thread GenerationResult calls abort() (NVBug 5955173).
+    """
     sampling_params = SamplingParams(max_tokens=4)
     result = GenerationResultBase(id=1, sampling_params=sampling_params)
     assert not result.aborted()
@@ -550,8 +559,10 @@ def test_ResponsePostprocessWorker():
 
 
 def test_get_params_for_first_rsp_returns_disaggregated_params_once():
-    """Verify _get_params_for_first_rsp extracts disaggregated_params from
-    the GenerationResult on the first call and returns None after.
+    """Verify _get_params_for_first_rsp extracts params once.
+
+    Extracts disaggregated_params from the GenerationResult on the first
+    call and returns None after.
 
     Regression test for https://nvbugs/5991957.
     """
@@ -592,7 +603,9 @@ def test_get_params_for_first_rsp_returns_disaggregated_params_once():
 
 
 def test_PostprocWorker_disaggregated_params():
-    """GEN-side: disaggregated_params seeded on the record persists across
+    """Test disaggregated_params persistence in PostprocWorker.
+
+    GEN-side: disaggregated_params seeded on the record persists across
     multiple responses (streaming pattern).
 
     Regression test for https://nvbugs/5991957: PostprocWorker record was
