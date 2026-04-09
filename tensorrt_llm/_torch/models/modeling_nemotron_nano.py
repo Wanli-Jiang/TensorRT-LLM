@@ -571,6 +571,7 @@ class NanoV2VLInputProcessor(BaseMultimodalInputProcessor, BaseMultimodalDummyIn
         self.downsample_ratio = self.config.downsample_ratio
         self.spatial_merge_size = int(self.patch_size / self.downsample_ratio)
         self.img_context_token_id = self.config.img_context_token_id
+        self.video_context_token_id = self.config.video_context_token_id
         self.num_image_token = int(
             (self.image_size // self.patch_size) ** 2 * (self.downsample_ratio**2)
         )
@@ -1004,14 +1005,23 @@ class NanoV2VLInputProcessor(BaseMultimodalInputProcessor, BaseMultimodalDummyIn
 
         if self.video_pruning_rate > 0:
             evs_query.append(split_text_prompt[-1])
-            evs_ids = [
-                self.tokenizer.encode(
-                    query,
-                    add_special_tokens=False,
-                    return_tensors="pt",
-                )[0]
-                for query in evs_query
-            ]
+            evs_ids = []
+            for query in evs_query:
+                if query == self.video_context_token:
+                    # Use the raw token ID directly instead of tokenizing the
+                    # string.  video_context_token may be out-of-vocabulary
+                    # (e.g. id 131081 with vocab size 131072) and tokenize into
+                    # multiple sub-tokens, which would break the single-token
+                    # check in merge_evs_mm_embeds.
+                    evs_ids.append(torch.tensor([self.video_context_token_id], dtype=torch.int32))
+                else:
+                    evs_ids.append(
+                        self.tokenizer.encode(
+                            query,
+                            add_special_tokens=False,
+                            return_tensors="pt",
+                        )[0]
+                    )
         else:
             evs_ids = None
 

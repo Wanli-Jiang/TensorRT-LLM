@@ -192,6 +192,7 @@ def _make_nano_processor(*, sound_config, **overrides):
     config.patch_size = overrides.get("patch_size", 16)
     config.downsample_ratio = overrides.get("downsample_ratio", 0.5)
     config.img_context_token_id = 20
+    config.video_context_token_id = 131081
     config.img_context_token = "<image>"
     config.video_context_token = "<video>"
     config.img_start_token = "<img>"
@@ -324,6 +325,46 @@ class TestNanoV2VLInputProcessor:
 
         with pytest.raises(ValueError, match="doesn't match"):
             proc._process_images_dynamic(imgs, prompt)
+
+    def test_evs_ids_use_raw_video_context_token_id(self):
+        """EVS evs_ids must contain the raw video_context_token_id, not sub-tokens.
+
+        Regression test: <video> may be out-of-vocabulary (e.g. id 131081 with
+        vocab size 131072) and tokenize into multiple sub-tokens.  The
+        single-token check in merge_evs_mm_embeds requires each video
+        placeholder to be exactly [video_context_token_id].
+        """
+        proc = _make_processor()
+        proc.video_pruning_rate = 0.9
+        num_frames = 5
+
+        # Patch tokenizer to return 2D tensors (matching real HF behavior).
+        orig_encode = proc.tokenizer.encode
+        proc.tokenizer.encode = mock.Mock(
+            side_effect=lambda text, **kw: (
+                orig_encode(text, **kw).unsqueeze(0)
+                if kw.get("return_tensors") == "pt"
+                else orig_encode(text, **kw)
+            )
+        )
+
+        num_tokens_per_frame_lst = [[256] + [0] * (num_frames - 1)]
+        frame_separators_lst = [[f"Frame {i + 1}: " for i in range(num_frames)]]
+        split_text_prompt = ["Hello ", " end"]
+
+        _, evs_ids = proc._process_video_prompts(
+            split_text_prompt,
+            num_tokens_per_frame_lst,
+            frame_separators_lst,
+        )
+        assert evs_ids is not None
+
+        video_entries = [
+            e for e in evs_ids if len(e) == 1 and e[0].item() == proc.video_context_token_id
+        ]
+        assert len(video_entries) == num_frames, (
+            f"Expected {num_frames} video_context_token_id entries, found {len(video_entries)}"
+        )
 
 
 @pytest.fixture
