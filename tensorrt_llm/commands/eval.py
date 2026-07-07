@@ -22,7 +22,8 @@ from .. import LLM as PyTorchLLM
 from .._tensorrt_engine import LLM
 from ..evaluate import (AIME2025, AIME2026, GSM8K, MMLU, MMMU, CnnDailymail,
                         CoVoST2, GPQADiamond, GPQAExtended, GPQAMain,
-                        JsonModeEval, LongBenchV1, LongBenchV2, MMMUPro)
+                        GPQANemoGym, IFBenchNemoGym, JsonModeEval, LongBenchV1,
+                        LongBenchV2, MMMUPro, SciCodeNemoGym)
 from ..llmapi import BuildConfig, KvCacheConfig
 from ..llmapi.llm_utils import update_llm_args_with_extra_options
 from ..logger import logger, severity_map
@@ -228,6 +229,9 @@ main.add_command(LongBenchV1.command)
 main.add_command(LongBenchV2.command)
 main.add_command(AIME2025.command)
 main.add_command(AIME2026.command)
+main.add_command(GPQANemoGym.command)
+main.add_command(IFBenchNemoGym.command)
+main.add_command(SciCodeNemoGym.command)
 
 if __name__ == "__main__":
     main()
