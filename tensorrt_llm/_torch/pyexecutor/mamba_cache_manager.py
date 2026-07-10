@@ -2627,6 +2627,9 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
             )
             kv_cache_config.enable_partial_reuse = False
 
+        # Needed by _build_cache_config, which runs inside super().__init__.
+        self.is_estimating_kv_cache = is_estimating_kv_cache
+
         super().__init__(
             kv_cache_config,
             kv_cache_type,
@@ -2654,7 +2657,6 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
         ]
         self._request_id_to_state_index = {}
         self.kv_cache_config = kv_cache_config
-        self.is_estimating_kv_cache = is_estimating_kv_cache
 
         self.cuda_state_indices = torch.zeros([self.max_batch_size],
                                               dtype=torch.int32,
@@ -2728,21 +2730,101 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
 
         return num_snapshots
 
+    def _parked_ssm_snapshot_slots(
+            self, kv_cache_config: KvCacheConfig) -> Optional[int]:
+        """Explicit parked-snapshot slot count from TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS.
+
+        Returns None when the override is inactive: knob unset, or KV cache
+        estimation pass (the temporary estimation manager must not allocate
+        the full snapshot pool from its tiny quota).
+        """
+        if PARKED_SSM_SLOTS is None or self.is_estimating_kv_cache:
+            return None
+        if not (kv_cache_config.enable_block_reuse
+                and kv_cache_config.mamba_save_last_snapshot):
+            raise ValueError(
+                "TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS requires save-last-snapshot "
+                "mode (kv_cache_config.enable_block_reuse and "
+                "kv_cache_config.mamba_save_last_snapshot); unset the environment "
+                "variable or enable snapshot reuse.")
+        interval = self._mamba_state_cache_interval
+        if interval is not None and interval > 0:
+            raise ValueError(
+                "TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS is only supported with "
+                "mamba_state_cache_interval <= 0 (save-last-snapshot mode), got "
+                f"mamba_state_cache_interval={interval}; interval snapshots "
+                "already size the pool from the snapshot interval.")
+        return PARKED_SSM_SLOTS
+
+    @staticmethod
+    def _distribute_ssm_slots(total_slots: int,
+                              num_requests: int) -> List[int]:
+        slots_per_request, extra_slots = divmod(total_slots, num_requests)
+        return [
+            slots_per_request + (1 if i < extra_slots else 0)
+            for i in range(num_requests)
+        ]
+
     def _ssm_slots_per_request_for_typical_batch(
         self,
         capacity: int,
         kv_cache_config: KvCacheConfig,
     ) -> List[int]:
         total_live_state_slots = self.max_batch_size
-        total_snapshot_slots = self._num_ssm_snapshots_for_capacity(
-            capacity, kv_cache_config)
-        total_slots = total_live_state_slots + total_snapshot_slots
-        slots_per_request, extra_slots = divmod(total_slots,
-                                                self.max_batch_size)
-        return [
-            slots_per_request + (1 if i < extra_slots else 0)
-            for i in range(self.max_batch_size)
-        ]
+        parked_slots = self._parked_ssm_snapshot_slots(kv_cache_config)
+        if parked_slots is not None:
+            total_snapshot_slots = parked_slots
+        else:
+            total_snapshot_slots = self._num_ssm_snapshots_for_capacity(
+                capacity, kv_cache_config)
+        return self._distribute_ssm_slots(
+            total_live_state_slots + total_snapshot_slots,
+            self.max_batch_size)
+
+    def _validate_parked_ssm_slots(
+        self,
+        parked_slots: int,
+        layers: List,
+        cache_tiers: List[CacheTierConfig],
+        tokens_per_block: int,
+        constraint_capacity: int,
+    ) -> None:
+        """Fail loudly if the requested SSM snapshot pool cannot fit the GPU quota.
+
+        The storage planner treats constraint-derived slot counts as hard
+        minimums and silently expands the effective quota to satisfy them,
+        which would over-allocate GPU memory and OOM at runtime. Check the
+        memory math up front instead: max_batch_size live states + parked
+        snapshots, plus the attention blocks the scheduler constraint batch
+        pins, must fit the device quota.
+        """
+        ssm_slot_bytes = sum(buf.size for layer in layers
+                             if isinstance(layer, SsmLayerConfig)
+                             for buf in layer.buffers)
+        if ssm_slot_bytes == 0:
+            return  # No local mamba layers on this rank.
+        attn_block_bytes = sum(buf.size for layer in layers
+                               if isinstance(layer, AttentionLayerConfig)
+                               for buf in layer.buffers)
+        min_attn_bytes = (self.max_batch_size *
+                          math.ceil(constraint_capacity / tokens_per_block) *
+                          attn_block_bytes)
+        gpu_quota = cache_tiers[0].quota
+        total_ssm_slots = self.max_batch_size + parked_slots
+        ssm_bytes = total_ssm_slots * ssm_slot_bytes
+        if ssm_bytes + min_attn_bytes > gpu_quota:
+            max_parked = max(
+                (gpu_quota - min_attn_bytes) // ssm_slot_bytes -
+                self.max_batch_size, 0)
+            raise ValueError(
+                f"TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS={parked_slots} does not fit "
+                f"the KV cache device quota: {total_ssm_slots} SSM slots "
+                f"({self.max_batch_size} live + {parked_slots} parked) x "
+                f"{ssm_slot_bytes / GB:.3f} GiB/slot = {ssm_bytes / GB:.2f} GiB, plus "
+                f"{min_attn_bytes / GB:.2f} GiB minimum attention blocks, exceeds the "
+                f"{gpu_quota / GB:.2f} GiB quota. Reduce it to at most ~{max_parked}, "
+                f"raise free_gpu_memory_fraction / max_gpu_total_bytes, or lower "
+                f"max_batch_size.")
 
     def _build_cache_config(
         self,
@@ -2801,6 +2883,22 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
         typical_ssm_slots = self._ssm_slots_per_request_for_typical_batch(
             self.max_seq_len, kv_cache_config)
 
+        # Scheduler constraint batch: max_batch_size short requests. Default
+        # SSM demand is one live state per request; with an explicit parked
+        # snapshot pool (TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS) the constraint
+        # also pins the parked slots so the storage planner treats them as a
+        # hard minimum instead of a ratio-derived, rounding-sensitive share.
+        constraint_capacity = 2049
+        parked_slots = self._parked_ssm_snapshot_slots(kv_cache_config)
+        if parked_slots is not None:
+            self._validate_parked_ssm_slots(parked_slots, layers, cache_tiers,
+                                            tokens_per_block,
+                                            constraint_capacity)
+            constraint_ssm_slots = self._distribute_ssm_slots(
+                self.max_batch_size + parked_slots, self.max_batch_size)
+        else:
+            constraint_ssm_slots = [1] * self.max_batch_size
+
         return KVCacheManagerConfigPy(
             tokens_per_block=tokens_per_block,
             vocab_size=vocab_size,
@@ -2810,10 +2908,10 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
             enable_partial_reuse=kv_cache_config.enable_partial_reuse,
             constraints=[
                 BatchDesc([
-                    KVCacheDesc(capacity=2049,
-                                history_length=2048,
-                                ssm_snapshots=1)
-                    for _ in range(self.max_batch_size)
+                    KVCacheDesc(capacity=constraint_capacity,
+                                history_length=constraint_capacity - 1,
+                                ssm_snapshots=constraint_ssm_slots[i])
+                    for i in range(self.max_batch_size)
                 ])
             ],
             typical_step=BatchDesc([
