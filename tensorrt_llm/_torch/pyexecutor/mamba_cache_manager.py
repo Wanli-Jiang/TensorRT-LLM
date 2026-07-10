@@ -17,7 +17,8 @@ import math
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Union
+from typing import (TYPE_CHECKING, Dict, Final, List, NamedTuple, Optional,
+                    Union)
 
 import torch
 import triton
@@ -57,6 +58,37 @@ RnnStateManagerCpp = tensorrt_llm.bindings.internal.batch_manager.RnnStateManage
 WorldConfig = tensorrt_llm.bindings.WorldConfig
 
 GB = 1 << 30
+
+
+def _parse_parked_ssm_slots(value: Optional[str]) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        slots = int(value)
+    except ValueError as e:
+        raise ValueError(
+            f"TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS must be a non-negative "
+            f"integer, got {value!r}") from e
+    if slots < 0:
+        raise ValueError(
+            f"TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS must be a non-negative "
+            f"integer, got {slots}")
+    return slots if slots > 0 else None
+
+
+# TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS=N sizes the KVCacheManagerV2 hybrid
+# SSM snapshot pool for N parked conversation snapshots per rank instead of
+# deriving the count from the batch shape (which yields a single reusable
+# snapshot slot beyond the live states in save-last-snapshot mode). Multi-turn
+# (agentic) serving needs roughly one parked snapshot per concurrently live
+# conversation to avoid LRU eviction of resume boundaries between turns, so N
+# should be set to the expected number of parked conversations. Applies only
+# in save-last-snapshot mode (enable_block_reuse + mamba_save_last_snapshot,
+# mamba_state_cache_interval <= 0) and only affects V2 hybrid cache sizing:
+# the memory-budget model here and the storage-planner pool split in
+# V2MambaHybridCacheManager. Unset or 0 keeps the existing sizing.
+PARKED_SSM_SLOTS: Final[Optional[int]] = _parse_parked_ssm_slots(
+    os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS"))
 
 # Replay kernels pad the token/window dimension to at least 16 for tensor-core
 # tiles, so history sizes below 16 are no faster when not writing and do
@@ -1809,6 +1841,16 @@ class CppMambaHybridCacheManager(KVCacheManager, MambaHybridCacheManager):
         if mamba_slope > 0:
             intercept = (max_batch_size * pp_size * state_bytes_per_rank *
                          last_snapshot_slots_per_request)
+        elif PARKED_SSM_SLOTS is not None and saves_last_snapshot:
+            # Budget the SSM pool for the requested number of parked
+            # conversation snapshots instead of one snapshot slot per batch
+            # slot. The allocation side (V2MambaHybridCacheManager) sizes the
+            # storage-planner pool consistently. Parked snapshots are per
+            # conversation, not per in-flight microbatch, so no pp_size
+            # multiplier on the snapshot term.
+            intercept = (max_batch_size * pp_size * state_bytes_per_rank *
+                         live_slots_per_request +
+                         PARKED_SSM_SLOTS * state_bytes_per_rank)
         return attention_slope + mamba_slope, intercept
 
     def shutdown(self):
