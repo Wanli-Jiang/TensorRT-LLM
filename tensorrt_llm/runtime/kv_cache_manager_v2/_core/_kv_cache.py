@@ -16,11 +16,12 @@
 import array
 import enum
 import math
+import os
 from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Callable, ClassVar, Iterator, NamedTuple, Type, cast
+from typing import TYPE_CHECKING, Callable, ClassVar, Final, Iterator, NamedTuple, Type, cast
 
 import cuda.bindings.driver as drv
 
@@ -39,6 +40,7 @@ from .._common import (
     CudaStream,
     PageIndex,
     PageIndexMode,
+    PageStatus,
     Priority,
     TokenIdExt,
 )
@@ -92,6 +94,18 @@ from ._pending_stats import _PendingStats
 
 if TYPE_CHECKING:
     from ._kv_cache_manager import KVCacheManager, ScratchDesc
+
+# TLLM_KV_CACHE_MANAGER_V2_PRUNE_STALE_SNAPSHOTS=0 restores the old behavior of
+# keeping every committed SSM snapshot until LRU eviction. When enabled
+# (default) and regular interval snapshots are disabled (ssm_reuse_interval ==
+# 0, i.e. save-last-snapshot mode), committing a new SSM snapshot drops the
+# sequence's previous parked snapshot. Multi-turn (agentic) workloads only
+# ever resume from the newest boundary, so stale snapshots are dead weight
+# that crowds the fixed-size SSM slot pool and LRU-evicts the *live*
+# boundaries of parked conversations, forcing full re-prefill on resume.
+PRUNE_STALE_SSM_SNAPSHOTS: Final[bool] = (
+    os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PRUNE_STALE_SNAPSHOTS", "1") == "1"
+)
 
 
 @dataclass(slots=True)
@@ -1343,6 +1357,60 @@ class _KVCache:
             break  # success
         else:
             return  # No pages available in any level, silently skip snapshot
+        # Only prune after the new snapshot is safely committed: on allocation
+        # failure the previous snapshot stays the sequence's newest resumable
+        # boundary. Interval snapshots (ssm_reuse_interval > 0) are kept on
+        # purpose for mid-sequence reuse, so pruning applies only to
+        # save-last-snapshot mode.
+        if PRUNE_STALE_SSM_SNAPSHOTS and self.manager.ssm_reuse_interval == 0:
+            self._drop_previous_ssm_snapshot(tree_block, ssm_lc_id)
+
+    def _drop_previous_ssm_snapshot(self, tree_block: Block, ssm_lc_id: LifeCycleId) -> None:
+        """Drop this sequence's previous parked SSM snapshot after committing a new one.
+
+        In save-last-snapshot mode (ssm_reuse_interval == 0), resume always matches the
+        newest boundary snapshot, so once ``tree_block`` carries a snapshot, older
+        snapshots along this sequence's chain only occupy slots in the fixed-size SSM
+        pool until LRU eviction. The previous boundary snapshot lives either on an
+        on-path ancestor block (block-aligned boundary) or on a partial sibling block
+        covered by the on-path block (an ``allow_covered_partial`` carrier kept alive
+        via ``protected_life_cycles``). Walk towards the root and drop the nearest one;
+        under this policy it is the only one, since older boundaries were pruned by
+        earlier commits.
+
+        Pages that are held or locked (e.g. another sequence is resuming from that
+        boundary right now) are never dropped: they re-enter the eviction queue when
+        released and a later commit prunes them.
+        """
+        node: Block = tree_block
+        while True:
+            parent = node.prev
+            stale: CommittedPage | None = None
+            # Partial siblings covered by the on-path block carry this sequence's
+            # earlier non-block-aligned boundary snapshots.
+            node_tokens = node.tokens
+            for sibling in parent.next.values():
+                if sibling is node or len(sibling.tokens) >= len(node_tokens):
+                    continue
+                ref = sibling.storage[ssm_lc_id]
+                page = None if ref is None else ref()
+                if page is not None and node_tokens[: len(sibling.tokens)] == sibling.tokens:
+                    stale = page
+                    break
+            if stale is None and isinstance(parent, Block):
+                ref = parent.storage[ssm_lc_id]
+                stale = None if ref is None else ref()
+            if stale is not None:
+                if stale.status == PageStatus.DROPPABLE and stale.scheduled_for_eviction:
+                    # After removal from the eviction controller, ``stale`` is the only
+                    # strong reference left (the tree holds a weak rawref). Dropping it
+                    # destroys the page: CommittedPage.__del__ detaches it from its tree
+                    # block (Block.unset_page) and releases the pool slot.
+                    self.manager._storage.exclude_from_eviction(stale)
+                return
+            if not isinstance(parent, Block):
+                return
+            node = parent
 
     def _should_snapshot_ssm_block(
         self, ordinal: BlockOrdinal, is_last: bool, force_ssm_snapshot: bool
