@@ -988,7 +988,13 @@ class PyExecutor:
         """
         responses = self._pending_transfer_responses
         self._pending_transfer_responses = []
-        if responses or self.enable_attention_dp:
+        # Transfer-completion responses are only produced in disaggregated
+        # mode (see _end_transfer_and_maybe_terminate, gated on
+        # kv_cache_transceiver). Without a transceiver the buffer is empty on
+        # every rank, so all ranks symmetrically skip the collective instead
+        # of paying an empty tp_gather on every iteration.
+        if responses or (self.enable_attention_dp
+                         and self.kv_cache_transceiver is not None):
             # Even when this rank has no responses we must participate in the
             # collective when ADP is enabled so that the other rank's gather
             # can complete.
@@ -1002,6 +1008,12 @@ class PyExecutor:
         Non-ADP runs handle timeouts inline; the buffer is empty here.
         """
         if not (self.enable_attention_dp and self.dist.world_size != 1):
+            return
+        # KV-transfer timeouts are only produced in disaggregated mode
+        # (_handle_responses gates the buffer on kv_cache_transceiver).
+        # Without a transceiver the buffer is empty on every rank, so all
+        # ranks symmetrically skip the per-iteration consensus allgather.
+        if self.kv_cache_transceiver is None:
             return
         timed_out = self._pending_timed_out_requests
         self._pending_timed_out_requests = []
