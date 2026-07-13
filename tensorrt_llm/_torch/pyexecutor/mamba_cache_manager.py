@@ -1946,16 +1946,20 @@ class CppMambaHybridCacheManager(KVCacheManager, MambaHybridCacheManager):
             if (self._use_replay_state_update
                     and self.prev_num_accepted_tokens is not None
                     and self.cache_buf_idx is not None):
-                self.prev_num_accepted_tokens[ctx_slots] = 0
-                self.cache_buf_idx[ctx_slots] = 0
+                # index_fill_ keeps the fill value a true scalar; the
+                # `buf[ctx_slots] = 0` form wraps 0 in a 0-d CPU tensor
+                # whose implicit host-to-device copy inside index_put_
+                # synchronizes with all queued forward work.
+                self.prev_num_accepted_tokens.index_fill_(0, ctx_slots, 0)
+                self.cache_buf_idx.index_fill_(0, ctx_slots, 0)
                 if self.old_x is not None:
-                    self.old_x[:, ctx_slots] = 0
+                    self.old_x.index_fill_(1, ctx_slots, 0)
                 if self.old_B is not None:
-                    self.old_B[:, ctx_slots] = 0
+                    self.old_B.index_fill_(1, ctx_slots, 0)
                 if self.old_dt is not None:
-                    self.old_dt[:, ctx_slots] = 0
+                    self.old_dt.index_fill_(1, ctx_slots, 0)
                 if self.old_dA_cumsum is not None:
-                    self.old_dA_cumsum[:, ctx_slots] = 0
+                    self.old_dA_cumsum.index_fill_(1, ctx_slots, 0)
             # Deterministic per-context-slot seed rotation.  Runs whenever
             # the seed buffer exists, including the non-replay SR path.
             # Bump the host counter once per batch and write one new seed
@@ -1965,7 +1969,10 @@ class CppMambaHybridCacheManager(KVCacheManager, MambaHybridCacheManager):
                 self._seed_request_counter += 1
                 counter = self._seed_request_counter
                 rank_offset = self._seed_rank_offset
-                host_slots = ctx_slots.cpu().tolist()
+                # Slot values were just written to _host_state_indices by
+                # _setup_state_indices; reading them there avoids a
+                # synchronizing device-to-host round-trip per iteration.
+                host_slots = self._host_state_indices[:num_contexts].tolist()
                 new_seeds = [
                     _compute_deterministic_mamba_seed(counter, slot,
                                                       rank_offset)
@@ -1974,8 +1981,8 @@ class CppMambaHybridCacheManager(KVCacheManager, MambaHybridCacheManager):
                 seed_tensor = torch.tensor(
                     new_seeds,
                     dtype=torch.int64,
-                    device=self.mamba_ssm_rand_seed.device,
-                )
+                    pin_memory=prefer_pinned(),
+                ).to(self.mamba_ssm_rand_seed.device, non_blocking=True)
                 self.mamba_ssm_rand_seed[ctx_slots] = seed_tensor
 
     def prepare_resources(self, scheduled_batch: ScheduledRequests):
@@ -3274,21 +3281,30 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
             return
         ctx_slots = self.cuda_state_indices[:num_contexts].long()
         if self._use_replay_state_update and self.prev_num_accepted_tokens is not None:
-            self.prev_num_accepted_tokens[ctx_slots] = 0
-            self.cache_buf_idx[ctx_slots] = 0
+            # index_fill_ keeps the fill value a true scalar. The previous
+            # `buf[ctx_slots] = 0` form wraps 0 in a 0-d CPU tensor that
+            # index_put_ copies host-to-device with an implicit
+            # cudaStreamSynchronize, blocking the host until all queued
+            # forward work drains (measured 17-21 ms per hit during
+            # chunked-prefill bursts).
+            self.prev_num_accepted_tokens.index_fill_(0, ctx_slots, 0)
+            self.cache_buf_idx.index_fill_(0, ctx_slots, 0)
             if self.old_x is not None:
-                self.old_x[:, ctx_slots] = 0
+                self.old_x.index_fill_(1, ctx_slots, 0)
             if self.old_B is not None:
-                self.old_B[:, ctx_slots] = 0
+                self.old_B.index_fill_(1, ctx_slots, 0)
             if self.old_dt is not None:
-                self.old_dt[:, ctx_slots] = 0
+                self.old_dt.index_fill_(1, ctx_slots, 0)
             if self.old_dA_cumsum is not None:
-                self.old_dA_cumsum[:, ctx_slots] = 0
+                self.old_dA_cumsum.index_fill_(1, ctx_slots, 0)
         if self.mamba_ssm_rand_seed is not None:
             self._seed_request_counter += 1
             counter = self._seed_request_counter
             rank_offset = self._seed_rank_offset
-            host_slots = ctx_slots.cpu().tolist()
+            # The slot values were just written to _host_state_indices by
+            # _setup_state_indices; reading them there avoids a synchronizing
+            # device-to-host round-trip on every context-bearing iteration.
+            host_slots = self._host_state_indices[:num_contexts].tolist()
             new_seeds = [
                 _compute_deterministic_mamba_seed(counter, slot, rank_offset)
                 for slot in host_slots
@@ -3296,8 +3312,8 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
             seed_tensor = torch.tensor(
                 new_seeds,
                 dtype=torch.int64,
-                device=self.mamba_ssm_rand_seed.device,
-            )
+                pin_memory=prefer_pinned(),
+            ).to(self.mamba_ssm_rand_seed.device, non_blocking=True)
             self.mamba_ssm_rand_seed[ctx_slots] = seed_tensor
 
     def flush_state_transfers(self) -> None:
