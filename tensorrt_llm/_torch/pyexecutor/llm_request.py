@@ -1012,6 +1012,31 @@ class LlmRequest(tensorrt_llm.bindings.internal.batch_manager.LlmRequest):
         self.child_requests.append(py_request)
 
 
+def get_cached_beam0_tokens(request: "LlmRequest") -> List[int]:
+    """Return ``request.get_tokens(0)`` with caching across iterations.
+
+    ``get_tokens`` copies the full beam-0 token vector across the C++/Python
+    boundary (an O(sequence_length) cost). Chunked prefill calls it once per
+    chunk while the token list is unchanged (the prompt); cache the copy on
+    the request and re-validate cheaply by length via the O(1)
+    ``get_num_tokens`` accessor. Token counts change whenever tokens are
+    appended (decode) or rewound (speculative rejection), which invalidates
+    the cache. Callers must treat the returned list as read-only.
+    """
+    get_num_tokens = getattr(request, "get_num_tokens", None)
+    if get_num_tokens is None:
+        # Duck-typed request stand-ins (e.g. test fakes) without the O(1)
+        # accessor: fall back to the uncached copy.
+        return request.get_tokens(0)
+    num_tokens = get_num_tokens(0)
+    cached = getattr(request, "py_cached_beam0_tokens", None)
+    if cached is not None and len(cached) == num_tokens:
+        return cached
+    tokens = request.get_tokens(0)
+    request.py_cached_beam0_tokens = tokens
+    return tokens
+
+
 def convert_wordlist(word_list) -> List[List[int]]:
     """Converts a wordlist from format:
 

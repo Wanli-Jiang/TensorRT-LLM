@@ -83,7 +83,13 @@ from .kv_cache_stats import (
     KVCacheV2LifeCycleIterationStats,
     KVCacheV2PoolGroupIterationStats,
 )
-from .llm_request import LlmRequest, LlmRequestState, SamplingConfig, get_draft_token_length
+from .llm_request import (
+    LlmRequest,
+    LlmRequestState,
+    SamplingConfig,
+    get_cached_beam0_tokens,
+    get_draft_token_length,
+)
 from .resource_manager import (
     BaseResourceManager,
     CacheTypeCpp,
@@ -1985,7 +1991,9 @@ class KVCacheManagerV2(BaseResourceManager):
         if req.is_first_context_chunk:
             kv_cache = self.kv_cache_map.get(req.py_request_id)
             if kv_cache is None:
-                all_tokens = req.get_tokens(DEFAULT_BEAM_INDEX)
+                # Warms the per-request token cache reused by every later
+                # chunk (input prep and block-reuse commits).
+                all_tokens = get_cached_beam0_tokens(req)
                 # Last token cannot be recovered, so we don't include it in
                 # the input tokens to look up for the block that can be reused.
                 if self.enable_block_reuse:
@@ -2804,8 +2812,10 @@ class KVCacheManagerV2(BaseResourceManager):
         save_snapshot = request.should_save_ssm_snapshot(commit_end)
         if commit_end > kv_cache.num_committed_tokens:
             commit_start = kv_cache.num_committed_tokens
+            # Cached across chunked-prefill commits: get_tokens copies the
+            # full prompt (up to ~100K tokens) on every chunk otherwise.
             tokens = self._augment_tokens_for_block_reuse(
-                request.get_tokens(DEFAULT_BEAM_INDEX),
+                get_cached_beam0_tokens(request),
                 request,
                 start=commit_start,
                 end=commit_end,
