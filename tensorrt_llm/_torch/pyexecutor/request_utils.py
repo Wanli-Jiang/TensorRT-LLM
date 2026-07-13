@@ -543,7 +543,9 @@ class RequestBroadcaster:
             return request_count
 
         if not self.dist.has_pp:
-            return self.dist.broadcast(request_count, root=0)
+            # Single-int payload on every iteration -> fixed-size int64
+            # fast path (one MPI_Bcast instead of header+payload+pickle).
+            return self.dist.broadcast_int64(request_count, root=0)
 
         if self.dist.is_first_pp_rank:
             with nvtx_range("tp_broadcast_request_count"):

@@ -170,6 +170,14 @@ class Distributed(ABC):
     def broadcast(self, obj, root=0):
         pass
 
+    def broadcast_int64(self, value, root=0):
+        """Broadcast a single Python int (must fit in int64) from *root*.
+
+        Subclasses may override with a single fixed-size buffer collective;
+        the default falls back to the generic object broadcast.
+        """
+        return self.broadcast(value, root=root)
+
     @abstractmethod
     def allgather(self, obj, root=0):
         pass
@@ -677,6 +685,22 @@ class MPIDist(Distributed):
     def broadcast(self, obj, root=0, chunk_size: int = 4 * 1024 * 1024):
         comm = mpi_comm()
         return safe_broadcast(comm, obj, root=root, chunk_size=chunk_size)
+
+    def broadcast_int64(self, value, root=0):
+        """Single fixed-size MPI_Bcast for one int64 value.
+
+        Avoids the two-collective header+payload protocol (and pickle)
+        that the generic object path (safe_broadcast) performs on every
+        call. Used on the per-iteration request-count probe.
+        """
+        if not ENABLE_MULTI_DEVICE:
+            return value
+        if MPI is None:
+            raise RuntimeError(
+                "mpi4py is required when ENABLE_MULTI_DEVICE is True")
+        buf = np.array([value if value is not None else 0], dtype=np.int64)
+        mpi_comm().Bcast([buf, MPI.INT64_T], root=root)
+        return int(buf[0])
 
     def allgather(self, obj):
         return mpi_allgather(obj)
