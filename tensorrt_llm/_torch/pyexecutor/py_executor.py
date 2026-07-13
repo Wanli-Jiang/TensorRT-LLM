@@ -4311,9 +4311,12 @@ class PyExecutor:
         balanced_context_requests = context_requests
         num_scheduled_context_requests = len(context_requests)
         num_scheduled_generation_requests = len(generation_requests)
+        # get_num_tokens is O(1); len(get_tokens(0)) would materialize the
+        # full token list (prompt can be >100K tokens) on every iteration
+        # that carries context work.
         num_scheduled_tokens = sum(
-            [len(req.get_tokens(0))
-             for req in context_requests]) + num_scheduled_generation_requests
+            req.get_num_tokens(0)
+            for req in context_requests) + num_scheduled_generation_requests
         # Note: We use tp_allgather instead of tp_cp_allgather because we want to
         # balance the requests across DP ranks; not CP ranks within those DP ranks.
         responses_list = self.dist.tp_allgather([
