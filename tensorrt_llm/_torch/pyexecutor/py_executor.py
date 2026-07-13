@@ -5720,7 +5720,16 @@ class PyExecutor:
         if not self.enable_attention_dp:
             return
 
-        assert self.expected_num_active_requests >= len(self.active_requests)
+        if self.expected_num_active_requests < len(self.active_requests):
+            # [adp-guard 2026-07-13] residual pad-dummy corner (#16161 final
+            # not in this merge): expected can undercount vs this rank's
+            # active set. This rank has more work than expected, so it needs
+            # no dummy -- skip padding instead of asserting the fleet down.
+            logger.warning(
+                "[adp-guard] expected_num_active_requests "
+                f"({self.expected_num_active_requests}) < active_requests "
+                f"({len(self.active_requests)}); skip dummy padding this iter")
+            return
         num_active_request = self._count_schedulable_active_requests()
 
         if self._should_skip_dummy_for_benchmark_disagg(num_active_request):
