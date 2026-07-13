@@ -288,14 +288,14 @@ class TestDefaultADPRouter:
 
     def test_gather_all_rank_states(self):
         dist = _mock_dist(tp_rank=0, tp_size=2, has_cp_helix=False)
-        dist.tp_allgather.return_value = [[0, 1, 10], [1, 2, 20]]
+        dist.tp_allgather_int64.return_value = [[0, 1, 10], [1, 2, 20]]
         router = DefaultADPRouter(dist=dist)
         req = Mock(py_orig_prompt_len=10)
         states = router.gather_all_rank_states([req])
         assert len(states) == 2
         assert states[0] == RankState(rank=0, num_active_requests=1, num_active_tokens=10)
         assert states[1] == RankState(rank=1, num_active_requests=2, num_active_tokens=20)
-        dist.tp_allgather.assert_called_once_with(
+        dist.tp_allgather_int64.assert_called_once_with(
             RankState(rank=0, num_active_requests=1, num_active_tokens=10).serialize()
         )
 
@@ -319,7 +319,7 @@ class TestDefaultADPRouter:
             iter_stats=pending,
         )
         rank1 = RankState(rank=1, num_active_requests=2, num_active_tokens=20)
-        dist.tp_allgather.return_value = [expected_local.serialize(), rank1.serialize()]
+        dist.tp_allgather_int64.return_value = [expected_local.serialize(), rank1.serialize()]
 
         router = DefaultADPRouter(dist=dist)
         req = Mock(py_orig_prompt_len=10)
@@ -327,7 +327,7 @@ class TestDefaultADPRouter:
 
         assert states[0] == expected_local
         assert states[1] == rank1
-        dist.tp_allgather.assert_called_once_with(expected_local.serialize())
+        dist.tp_allgather_int64.assert_called_once_with(expected_local.serialize())
 
 
 def test_schedule_attention_dp_requests_scheduled_requests(
