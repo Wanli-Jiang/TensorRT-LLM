@@ -122,3 +122,10 @@ tests/integration/defs/stress_test/artifacts/
 .claude/agent-tests/perf-test-sync/report.html
 .claude/agent-tests/perf-test-sync/results.json
 .claude/settings.json
+
+agent-perf/
+agg-perf-study/
+disagg-study/
+nvl72-handoff/
+claude-cluster-migration.md
+disagg_fix_nixl.diff

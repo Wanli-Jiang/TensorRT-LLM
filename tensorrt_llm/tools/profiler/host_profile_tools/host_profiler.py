@@ -740,6 +740,15 @@ class HostProfiler:
             self._line_profiler.disable()
             self._tracing_active = False
             logger.info(f"Line profiler tracing stopped at iteration {iter_counter}")
+            # Persist results at the window boundary: worker teardown is often
+            # SIGTERM/SIGKILL (no orderly stop()), which silently loses the stats.
+            if self.output_path:
+                try:
+                    with open(self.output_path, "w") as f:
+                        self._line_profiler.print_stats(stream=f)
+                    logger.info(f"Line profiler stats written to {self.output_path}")
+                except Exception as e:  # pragma: no cover - best-effort dump
+                    logger.warning(f"Line profiler eager dump failed: {e}")
 
         if iter_counter in self._profile_start_iters and not self._tracing_active:
             self._line_profiler.enable()

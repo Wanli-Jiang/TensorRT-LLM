@@ -4831,13 +4831,30 @@ class PyExecutor:
                     and self.max_num_tokens is not None):
                 token_nums = [self.max_num_tokens]
             dummy_request_ids = [ATTENTION_DP_DUMMY_REQUEST_ID]
-            llm_request = self.kv_cache_manager.add_dummy_requests(
+            dummy_requests = self.kv_cache_manager.add_dummy_requests(
                 request_ids=dummy_request_ids,
                 token_nums=token_nums,
                 is_gen=self._adp_dummy_is_gen,
                 prepare_resource=True,
                 max_num_draft_tokens=self.max_total_draft_tokens,
-            )[0]
+            )
+            if dummy_requests is None and token_nums is not None:
+                # add_dummy_requests returns None when the KV cache manager
+                # cannot allocate (saturated IndexMapper or pool pressure).
+                # A full-size context dummy can fail under load; a minimal
+                # dummy still lets this rank join the forward collectives.
+                dummy_requests = self.kv_cache_manager.add_dummy_requests(
+                    request_ids=dummy_request_ids,
+                    is_gen=self._adp_dummy_is_gen,
+                    prepare_resource=True,
+                    max_num_draft_tokens=self.max_total_draft_tokens,
+                )
+            if dummy_requests is None:
+                raise RuntimeError(
+                    "Failed to allocate an attention-DP dummy request; KV "
+                    "cache manager is saturated. Skipping the dummy would "
+                    "desynchronize forward collectives across ranks.")
+            llm_request = dummy_requests[0]
             llm_request.is_attention_dp_dummy = True
             spec_resource_manager = self.resource_manager.get_resource_manager(
                 ResourceManagerType.SPEC_RESOURCE_MANAGER)

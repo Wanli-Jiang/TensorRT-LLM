@@ -1267,7 +1267,12 @@ class KVCacheManagerV2(BaseResourceManager):
         # mixed windows in one group, this needs to fan out per-layer.
 
         def get_event_window_size(layer_id: int) -> int:
-            window_size = self.kv_cache_manager_py_config.layers[layer_id].sliding_window_size
+            # SSM layer groups (hybrid models) have no sliding_window_size; report the
+            # full-sequence window in their event metadata. KV-aware routers only match
+            # attention block hashes, so this is metadata-only for SSM groups.
+            window_size = getattr(
+                self.kv_cache_manager_py_config.layers[layer_id], "sliding_window_size", None
+            )
             return self.max_seq_len if window_size is None else int(window_size)
 
         return {
