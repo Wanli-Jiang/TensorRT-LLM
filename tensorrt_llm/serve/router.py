@@ -861,11 +861,25 @@ class BlockHashMixin:
             ])
             chat_template_kwargs = (request.chat_template_kwargs if getattr(
                 request, "chat_template_kwargs", None) else {})
+            # Normalize messages EXACTLY like the serve frontend does
+            # (serve/chat_utils.parse_chat_message_content): flattens content
+            # parts to text, parses assistant tool_calls' JSON-string
+            # `function.arguments` into dicts (chat templates apply `| items`
+            # on them and raise "Can only get item pairs from a mapping" on
+            # raw strings), and carries reasoning_content / tool_call_id.
+            # Byte-identical rendering vs the serve path is required for the
+            # router's block hashes to match what the workers cached.
+            from tensorrt_llm.inputs.utils import MultimodalDataTracker
+            from tensorrt_llm.serve.chat_utils import parse_chat_message_content
+            mm_tracker = MultimodalDataTracker(model_type="")
+            conversation = []
+            for msg in request.messages:
+                m = (msg if isinstance(msg, dict) else
+                     (msg.model_dump(exclude_none=True)
+                      if hasattr(msg, "model_dump") else dict(msg)))
+                conversation.append(parse_chat_message_content(m, mm_tracker))
             rendered = tokenizer.apply_chat_template(
-                [
-                    msg if isinstance(msg, dict) else dict(msg)
-                    for msg in request.messages
-                ],
+                conversation,
                 add_generation_prompt=request.add_generation_prompt,
                 tokenize=False,
                 return_dict=False,

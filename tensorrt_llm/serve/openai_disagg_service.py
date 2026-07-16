@@ -342,7 +342,19 @@ class OpenAIDisaggregatedService(OpenAIService):
             assert isinstance(self._gen_router, KvCacheAwareRouter)
             # Query kv cache status and select a best gen_server.
             # The server is reserved for generation request
-            gen_server, info = await self._gen_router.get_next_server(request)
+            try:
+                gen_server, info = await self._gen_router.get_next_server(request)
+            except Exception:
+                # FAIL OPEN: a routing/tokenize failure must degrade to the
+                # regular ctx-first flow, not fail the request (observed: chat
+                # templates raising on unusual message shapes took down every
+                # request instead of merely skipping the ctx bypass).
+                logger.warning(
+                    "[conditional_disagg] router match failed; falling back to "
+                    "ctx-first for this request",
+                    exc_info=True,
+                )
+                return None, True
             match_length = sum(info["matches"])
             total_length = sum(len(token_list) for token_list in info["token_lists"])
             need_ctx_decision = (

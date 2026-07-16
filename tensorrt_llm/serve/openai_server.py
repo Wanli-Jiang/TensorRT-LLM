@@ -1307,18 +1307,49 @@ class OpenAIServer(_VideoRoutesMixin):
 
             reusable_prompt_len = None
             stable_prompt: Optional[str] = None
+            prompt_ids: Optional[List[int]] = None
             if request.prompt_token_ids is not None:
                 prompt = request.prompt_token_ids
             else:
-                if (request.add_generation_prompt
-                        and not _has_mm_placeholders(mm_placeholder_counts)):
-                    stable_prompt = apply_chat_template(
+                # Chat-template rendering + the reusable-prefix token count are
+                # CPU-bound (~6 ms render + ~50 ms encode for a 40K-token
+                # agentic request). Running them inline serializes ALL requests
+                # through the event loop — measured as a hard ~13 req/s
+                # frontend ceiling on disagg ctx servers (whole-system 614K
+                # tok/s wall). Offload to the default thread pool; HF fast
+                # tokenizers release the GIL so concurrent requests scale
+                # across cores. Inputs are all request-local; no shared state.
+                def _render_prompts_blocking():
+                    _stable = None
+                    _reusable_len = None
+                    _prompt_ids = None
+                    if (request.add_generation_prompt
+                            and not _has_mm_placeholders(mm_placeholder_counts)):
+                        _stable = apply_chat_template(
+                            model_type=resolve_top_level_model_type(
+                                self.model_config),
+                            tokenizer=self.tokenizer,
+                            processor=self.processor,
+                            conversation=conversation,
+                            add_generation_prompt=False,
+                            mm_placeholder_counts=mm_placeholder_counts,
+                            tools=tool_dicts,
+                            documents=request.documents,
+                            chat_template=request.chat_template
+                            or self.chat_template,
+                            chat_template_kwargs=request.chat_template_kwargs
+                            or {},
+                        )
+                        _reusable_len = _count_text_prompt_tokens(
+                            self.tokenizer, _stable,
+                            request.add_special_tokens)
+                    _prompt = apply_chat_template(
                         model_type=resolve_top_level_model_type(
                             self.model_config),
                         tokenizer=self.tokenizer,
                         processor=self.processor,
                         conversation=conversation,
-                        add_generation_prompt=False,
+                        add_generation_prompt=request.add_generation_prompt,
                         mm_placeholder_counts=mm_placeholder_counts,
                         tools=tool_dicts,
                         documents=request.documents,
@@ -1326,21 +1357,30 @@ class OpenAIServer(_VideoRoutesMixin):
                         or self.chat_template,
                         chat_template_kwargs=request.chat_template_kwargs or {},
                     )
-                    reusable_prompt_len = _count_text_prompt_tokens(
-                        self.tokenizer, stable_prompt,
-                        request.add_special_tokens)
-                prompt: str = apply_chat_template(
-                    model_type=resolve_top_level_model_type(self.model_config),
-                    tokenizer=self.tokenizer,
-                    processor=self.processor,
-                    conversation=conversation,
-                    add_generation_prompt=request.add_generation_prompt,
-                    mm_placeholder_counts=mm_placeholder_counts,
-                    tools=tool_dicts,
-                    documents=request.documents,
-                    chat_template=request.chat_template or self.chat_template,
-                    chat_template_kwargs=request.chat_template_kwargs or {},
-                )
+                    # Pre-tokenize the final prompt here as well: passing token
+                    # ids to generate_async takes the fast path and skips
+                    # DefaultInputProcessor's encode (~50 ms for a 40K-token
+                    # request) which would otherwise run on the event loop.
+                    # Mirror its exact parameters so the ids are identical.
+                    _kwargs = {}
+                    if sampling_params.truncate_prompt_tokens is not None:
+                        _kwargs = dict(
+                            truncation=True,
+                            max_length=sampling_params.truncate_prompt_tokens)
+                    try:
+                        _prompt_ids = self.tokenizer.encode(
+                            _prompt,
+                            add_special_tokens=sampling_params.
+                            add_special_tokens,
+                            **_kwargs)
+                    except Exception:
+                        # e.g. tiktoken tokenizers reject add_special_tokens;
+                        # fall back to the text path (llmapi tokenizes).
+                        _prompt_ids = None
+                    return _stable, _reusable_len, _prompt, _prompt_ids
+
+                stable_prompt, reusable_prompt_len, prompt, prompt_ids = (
+                    await asyncio.to_thread(_render_prompts_blocking))
             prompt = prompt_inputs(prompt)
 
             mm_data, mm_embeddings = await mm_coroutines
@@ -1352,6 +1392,10 @@ class OpenAIServer(_VideoRoutesMixin):
                 raise ValueError(
                     "Passing 'multi_modal_data' and 'multi_modal_embeddings' at the same time is not supported."
                 )
+            if prompt_ids is not None and not mm_data and not mm_embeddings:
+                # Text-only request pre-tokenized in the render thread: hand
+                # generate_async the ids so it skips its own encode.
+                prompt = prompt_inputs(prompt_ids)
 
             if request.mm_processor_kwargs:
                 prompt["mm_processor_kwargs"] = request.mm_processor_kwargs
