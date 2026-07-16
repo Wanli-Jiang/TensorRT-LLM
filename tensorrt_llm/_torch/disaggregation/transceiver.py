@@ -56,6 +56,9 @@ def _find_consensus_request_ids(request_ids_all_ranks, sync_size):
 class KvCacheTransceiverV2(KvCacheTransceiver):
     _CONTEXT_RECEIVER_WAIT_TIMEOUT_MULTIPLIER = 10
     _CONTEXT_RECEIVER_WAIT_TIMEOUT_FLOOR_MS = 600_000
+    # Minimum time cancel_request keeps retrying before force-failing
+    # sessions whose tasks are stuck mid-write (e.g. peer agent unreachable).
+    _FORCE_CANCEL_GRACE_FLOOR_MS = 30_000
 
     def __init__(
         self,
@@ -102,6 +105,9 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
         self._send_reqs = {}
         self._recv_reqs = {}
         self._wait_reqs = {}
+        # rid -> monotonic time of the first cancel_request attempt that was
+        # blocked by mid-write tasks; drives the force-cancel grace period.
+        self._cancel_pending_since: Dict[int, float] = {}
         self._page_table = self._transfer_worker.page_table
 
         # Sticky role markers; flip True once any session opens, used to short-circuit
@@ -426,6 +432,7 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
             sessions[rid].close()
             del reqs[rid]
             del sessions[rid]
+            self._cancel_pending_since.pop(rid, None)
 
     def _apply_aux(self, session, req: LlmRequest):
         """Unpack aux tokens from session into request's context_phase_params."""
@@ -608,6 +615,7 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
             del self._send_reqs[rid]
             del self._send_sessions[rid]
             self._send_session_created_times.pop(rid, None)
+            self._cancel_pending_since.pop(rid, None)
 
         for rid in completed:
             if mark_complete:
@@ -616,6 +624,7 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
             del self._send_reqs[rid]
             del self._send_sessions[rid]
             self._send_session_created_times.pop(rid, None)
+            self._cancel_pending_since.pop(rid, None)
         self._close_failed_sessions(self._send_sessions, self._send_reqs, failed)
         for rid in failed:
             self._send_session_created_times.pop(rid, None)
@@ -670,6 +679,7 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
             self._recv_sessions[rid].close()
             del self._recv_reqs[rid]
             del self._recv_sessions[rid]
+            self._cancel_pending_since.pop(rid, None)
 
         for rid in completed:
             session = self._recv_sessions[rid]
@@ -681,6 +691,7 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
             session.close()
             del self._recv_reqs[rid]
             del self._recv_sessions[rid]
+            self._cancel_pending_since.pop(rid, None)
         if failed:
             logger.warning(
                 f"Disagg gen transfer FAILED rank={self._dist.rank} "
@@ -746,17 +757,41 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
 
         Returns False if any task is mid-write (TRANSFERRING); caller must
         retry next iteration. Returns True when safe to free KV memory.
+
+        A task can stay TRANSFERRING forever when the peer agent is
+        unreachable (e.g. NIXL agent-metadata failure), so after a grace
+        period of unsuccessful retries the sessions are force-failed and
+        closed — otherwise the request pins scheduler and admission
+        resources indefinitely and can wedge the whole server. The grace
+        period starts at the first blocked cancel attempt, well after
+        cancel() notified the peer, so a late peer write into freed blocks
+        is not expected.
         """
         rid = get_unique_rid(req)
 
         # Not yet started (generation-first wait queue).
         self._wait_reqs.pop(rid, None)
 
+        grace_ms = max(self.kv_transfer_timeout_ms or 0,
+                       self._FORCE_CANCEL_GRACE_FLOOR_MS)
+        first_blocked = self._cancel_pending_since.get(rid)
+        force = (first_blocked is not None
+                 and (time.monotonic() - first_blocked) * 1000 > grace_ms)
+
+        def _cancel_session(session, role: str) -> bool:
+            """Cancel one session; return True if it is still mid-write."""
+            session.cancel()
+            if session.has_transferring_tasks() and force:
+                logger.warning(
+                    f"cancel_request: force-failing {role} session rid={rid} "
+                    f"with mid-write tasks after {grace_ms}ms cancel grace")
+                session.set_exception("force-cancelled after grace period")
+            return session.has_transferring_tasks()
+
         has_transferring = False
 
         if rid in self._send_sessions:
-            self._send_sessions[rid].cancel()
-            if self._send_sessions[rid].has_transferring_tasks():
+            if _cancel_session(self._send_sessions[rid], "send"):
                 has_transferring = True
             else:
                 self._send_sessions[rid].close()
@@ -765,8 +800,7 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
                 self._send_session_created_times.pop(rid, None)
 
         if rid in self._recv_sessions:
-            self._recv_sessions[rid].cancel()
-            if self._recv_sessions[rid].has_transferring_tasks():
+            if _cancel_session(self._recv_sessions[rid], "recv"):
                 has_transferring = True
             else:
                 self._recv_sessions[rid].close()
@@ -774,7 +808,9 @@ class KvCacheTransceiverV2(KvCacheTransceiver):
                 del self._recv_sessions[rid]
 
         if has_transferring:
+            self._cancel_pending_since.setdefault(rid, time.monotonic())
             return False
+        self._cancel_pending_since.pop(rid, None)
         return True
 
     def get_disaggregated_params(self) -> Dict[str, Any]:

@@ -164,20 +164,92 @@ class OpenAIDisaggregatedService(OpenAIService):
             ):
                 gen_req.disaggregated_params = None
         if ctx_response is None or self._need_gen(ctx_response):
-            if not gen_server:
-                gen_server, _ = await self._gen_router.get_next_server(
-                    gen_req, exclude_server=ctx_server
-                )
-            gen_response = await self._gen_client.send_request(
-                gen_req, server=gen_server, hooks=hooks
-            )
-            return gen_response
+            return await self._send_gen_with_retry(gen_req, gen_server, ctx_server, hooks)
         else:
             if request.stream:
                 # ctx client will never return a generator when streaming is requested
                 # make up for this by returning a done generator
                 return done_generator()
             return ctx_response
+
+    # Retry the generation phase on a different gen server when the chosen one
+    # fails before producing its first token. A single broken (ctx, gen) NIXL
+    # pairing otherwise blackholes every conversation pinned to that gen server
+    # (see the one-dead-gen-per-run bug); with fast-failing transfers the
+    # orchestrator is the right place to route around it. exclude_server makes
+    # the ConversationRouter re-pin the conversation to a healthy server.
+    _GEN_RETRY_ATTEMPTS = int(os.getenv("TRTLLM_DISAGG_GEN_RETRY_ATTEMPTS", "3"))
+    _GEN_FIRST_CHUNK_TIMEOUT_S = float(
+        os.getenv("TRTLLM_DISAGG_GEN_FIRST_CHUNK_TIMEOUT_S", "60"))
+
+    async def _send_gen_with_retry(
+        self,
+        gen_req: UCompletionRequest,
+        gen_server: Optional[str],
+        ctx_server: Optional[str],
+        hooks: Optional[ResponseHooks] = None,
+    ) -> UCompletionResponseOrGenerator:
+        last_exc: Optional[Exception] = None
+        exclude_server = None
+        for attempt in range(max(self._GEN_RETRY_ATTEMPTS, 1)):
+            if not gen_server:
+                gen_server, _ = await self._gen_router.get_next_server(
+                    gen_req, exclude_server=exclude_server or ctx_server
+                )
+            try:
+                gen_response = await self._gen_client.send_request(
+                    gen_req, server=gen_server, hooks=hooks
+                )
+                if gen_req.stream and hasattr(gen_response, "__anext__"):
+                    # Streaming: errors surface only on iteration. Peek the
+                    # first chunk so a pre-first-token failure (e.g. KV
+                    # transfer error) is still retryable; once a chunk has
+                    # been produced the response is committed to this server.
+                    gen_response = await self._peek_stream_first_chunk(
+                        gen_response, self._GEN_FIRST_CHUNK_TIMEOUT_S
+                    )
+                return gen_response
+            except Exception as e:
+                last_exc = e
+                logger.warning(
+                    f"Generation phase failed on server {gen_server} before "
+                    f"first token (attempt {attempt + 1}/"
+                    f"{self._GEN_RETRY_ATTEMPTS}): {e}; retrying on another "
+                    f"gen server")
+                exclude_server = gen_server
+                gen_server = None
+        assert last_exc is not None
+        raise last_exc
+
+    @staticmethod
+    async def _peek_stream_first_chunk(gen, timeout_s: float):
+        """Await the first chunk of a response stream, then re-chain it.
+
+        Raises (propagating the stream's error or asyncio.TimeoutError) if no
+        first chunk arrives, so the caller can retry on another server. An
+        immediately-exhausted stream is passed through as-is.
+        """
+        try:
+            first = await asyncio.wait_for(gen.__anext__(), timeout=timeout_s)
+        except StopAsyncIteration:
+            async def empty():
+                return
+                yield  # pragma: no cover
+            return empty()
+        except BaseException:
+            # Abort the underlying request so the failed server releases it.
+            try:
+                await gen.aclose()
+            except Exception:
+                pass
+            raise
+
+        async def chained():
+            yield first
+            async for chunk in gen:
+                yield chunk
+
+        return chained()
 
     def _need_gen(self, response: UCompletionResponse) -> bool:
         if response and response.choices[0].finish_reason not in _GEN_PENDING_FINISH_REASONS:

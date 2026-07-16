@@ -288,7 +288,7 @@ def _make_gen_request(num_draft_tokens=0):
 
 
 def _make_disagg_transfer_request(
-    request_id, prompt_len, in_progress=False, total_input_len_cp=None
+    request_id, prompt_len, in_progress=False, total_input_len_cp=None, timed_out=False
 ):
     """Helper to create a mock disaggregated generation transfer request."""
     req = Mock()
@@ -297,7 +297,82 @@ def _make_disagg_transfer_request(
     req.py_prompt_len = prompt_len
     req.total_input_len_cp = prompt_len if total_input_len_cp is None else total_input_len_cp
     req.is_disagg_generation_transmission_in_progress = in_progress
+    req.py_kv_transfer_timed_out = timed_out
     return req
+
+
+class TestCancelRequestForceClose:
+    """cancel_request must eventually succeed even for sessions whose tasks
+    are stuck mid-write (e.g. peer agent unreachable), otherwise the request
+    pins admission budget forever and wedges the server."""
+
+    @staticmethod
+    def _make_transceiver(timeout_ms=None):
+        from tensorrt_llm._torch.disaggregation.transceiver import KvCacheTransceiverV2
+
+        xcvr = object.__new__(KvCacheTransceiverV2)
+        xcvr.kv_transfer_timeout_ms = timeout_ms
+        xcvr._send_sessions = {}
+        xcvr._send_session_created_times = {}
+        xcvr._recv_sessions = {}
+        xcvr._send_reqs = {}
+        xcvr._recv_reqs = {}
+        xcvr._wait_reqs = {}
+        xcvr._cancel_pending_since = {}
+        return xcvr
+
+    @staticmethod
+    def _make_stuck_session():
+        """Session whose tasks stay TRANSFERRING until force-failed."""
+        session = Mock()
+        state = {"transferring": True}
+        session.has_transferring_tasks.side_effect = lambda: state["transferring"]
+        session.set_exception.side_effect = lambda *a, **k: state.update(transferring=False)
+        return session
+
+    @staticmethod
+    def _make_request(rid):
+        req = Mock()
+        req.py_disaggregated_params.disagg_request_id = rid
+        return req
+
+    def test_retries_within_grace_then_force_closes(self):
+        import time as _time
+
+        xcvr = self._make_transceiver()
+        rid = 7
+        session = self._make_stuck_session()
+        xcvr._recv_sessions[rid] = session
+        xcvr._recv_reqs[rid] = object()
+        req = self._make_request(rid)
+
+        # Within grace: cancel is blocked by the mid-write task.
+        assert xcvr.cancel_request(req) is False
+        assert rid in xcvr._cancel_pending_since
+        assert rid in xcvr._recv_sessions
+        session.set_exception.assert_not_called()
+
+        # After grace: force-fail, clean up, and report success.
+        xcvr._cancel_pending_since[rid] = _time.monotonic() - 10_000
+        assert xcvr.cancel_request(req) is True
+        session.set_exception.assert_called_once()
+        session.close.assert_called_once()
+        assert rid not in xcvr._recv_sessions
+        assert rid not in xcvr._cancel_pending_since
+
+    def test_unblocked_cancel_needs_no_force(self):
+        xcvr = self._make_transceiver()
+        rid = 9
+        session = Mock()
+        session.has_transferring_tasks.return_value = False
+        xcvr._send_sessions[rid] = session
+        xcvr._send_reqs[rid] = object()
+        req = self._make_request(rid)
+
+        assert xcvr.cancel_request(req) is True
+        session.set_exception.assert_not_called()
+        session.close.assert_called_once()
+        assert rid not in xcvr._send_sessions
 
 
 class TestDisaggTransferAdmissionController:
@@ -339,6 +414,19 @@ class TestDisaggTransferAdmissionController:
         assert result.active_transfer_blocks == 1
         assert result.deferred_request_count == 1
         assert result.is_blocked_by_active_transfers()
+
+    def test_timed_out_transfers_do_not_consume_budget(self):
+        # A hung transfer flagged timed-out is being torn down; it must not
+        # hold admission budget or it can starve all future gen-inits.
+        controller = DisaggTransferAdmissionController(max_tokens_in_buffer=32, tokens_per_block=32)
+        hung = _make_disagg_transfer_request(1, 32, in_progress=True, timed_out=True)
+        candidate = _make_disagg_transfer_request(2, 32)
+
+        result = controller.select(active_requests=[hung], candidates=[candidate])
+
+        assert result.admitted_requests == [candidate]
+        assert result.active_transfer_blocks == 0
+        assert result.deferred_request_count == 0
 
     def test_admits_oversized_head_when_idle(self):
         controller = DisaggTransferAdmissionController(max_tokens_in_buffer=32, tokens_per_block=32)

@@ -130,6 +130,9 @@ class WriteMeta:
     slice_id: Optional[int] = None
     is_last_slice: bool = False
     meta_type: WriteMetaType = WriteMetaType.KV
+    # Peer instance name (peer_name minus the rank suffix); used to re-fetch
+    # the registered RankInfo blob when recovering a broken peer agent.
+    peer_instance: str = ""
 
 
 class MessageType:
@@ -247,6 +250,29 @@ class Sender(SenderBase):
         # Guards concurrent add() from the listener thread.
         self._loaded_remote_agents: set[str] = set()
         self._loaded_remote_agents_lock = threading.Lock()
+        # Self-healing for broken peer agents: last MD-reload attempt per
+        # peer_name, rate-limited so concurrent failing transfers don't storm
+        # invalidate/load cycles against a genuinely dead peer.
+        self._peer_md_reload_times: dict[str, float] = {}
+        self._peer_md_reload_lock = threading.Lock()
+        # Per-peer circuit breaker: after _PEER_BREAKER_THRESHOLD consecutive
+        # transfer failures, stop submitting to that peer entirely. NIXL's
+        # auto-invalidate-on-failure path (getXferStatus ->
+        # invalidateRemoteData -> ucx disconnect) is racy under concurrent
+        # failures and segfaults the process (observed twice, jobs
+        # 889929/891270), so a dead peer must be quarantined, not hammered.
+        # The orchestrator-level gen retry reroutes its conversations.
+        self._peer_failure_counts: dict[str, int] = {}
+        self._peer_tripped: set[str] = set()
+        # Per-peer serialization of NIXL submit+wait: when a transfer to a
+        # peer fails, NIXL's getXferStatus auto-invalidates that peer's MD
+        # (rkey/endpoint destruction). A concurrent wait() on another
+        # transfer to the SAME peer then uses freed UCX state -> segfault
+        # (observed in jobs 889929/891270/892538, stack:
+        # getXferStatus -> invalidateRemoteData -> nixlUcxEngine::disconnect).
+        # Serializing per peer removes the race while keeping cross-peer
+        # parallelism across the sender worker threads.
+        self._peer_nixl_locks: dict[str, threading.Lock] = {}
         self._num_threads = KV_TRANSFER_NUM_THREADS
         self._send_task_queues: List[queue.Queue] = [
             queue.Queue() for _ in range(self._num_threads)
@@ -456,6 +482,85 @@ class Sender(SenderBase):
             TransferOp.WRITE, src_memory_descs, dst_memory_descs, write_meta.peer_name, None
         )
 
+    # Minimum interval between MD-reload attempts for the same peer. Keeps
+    # concurrent failing transfers from storming invalidate/load cycles
+    # against a genuinely dead peer while still healing transient failures
+    # (lost registration, UCX endpoint reset) quickly.
+    _PEER_MD_RELOAD_MIN_INTERVAL_S = 5.0
+    # Consecutive transfer failures after which a peer is quarantined.
+    _PEER_BREAKER_THRESHOLD = 3
+
+    def _peer_nixl_lock(self, peer_name: str) -> threading.Lock:
+        with self._peer_md_reload_lock:
+            lock = self._peer_nixl_locks.get(peer_name)
+            if lock is None:
+                lock = threading.Lock()
+                self._peer_nixl_locks[peer_name] = lock
+            return lock
+
+    def _is_peer_tripped(self, peer_name: str) -> bool:
+        with self._peer_md_reload_lock:
+            return peer_name in self._peer_tripped
+
+    def _record_peer_result(self, peer_name: str, success: bool) -> None:
+        with self._peer_md_reload_lock:
+            if success:
+                self._peer_failure_counts.pop(peer_name, None)
+                return
+            count = self._peer_failure_counts.get(peer_name, 0) + 1
+            self._peer_failure_counts[peer_name] = count
+            if (count >= self._PEER_BREAKER_THRESHOLD
+                    and peer_name not in self._peer_tripped):
+                self._peer_tripped.add(peer_name)
+                logger.error(
+                    f"Peer circuit breaker TRIPPED for {peer_name} after "
+                    f"{count} consecutive transfer failures; all further "
+                    f"transfers to this peer fail fast without touching the "
+                    f"transfer agent. Conversations should be rerouted by "
+                    f"the orchestrator's gen retry.")
+
+    def _try_recover_peer_agent(self, write_meta: WriteMeta) -> bool:
+        """Invalidate and re-load a peer's NIXL metadata from the registered blob.
+
+        There is otherwise NO heal path for a broken peer agent: registration
+        is one-shot (the receiver never re-sends REGISTER_RANK_INFO) and a UCX
+        endpoint that entered the error state stays DISCONNECTED forever, so a
+        single transient failure used to blackhole the (ctx, gen) pairing for
+        the rest of the run. Returns True if a reload was performed.
+        """
+        peer_name = write_meta.peer_name
+        if not write_meta.peer_instance:
+            return False
+        now = time.monotonic()
+        with self._peer_md_reload_lock:
+            last = self._peer_md_reload_times.get(peer_name)
+            if last is not None and now - last < self._PEER_MD_RELOAD_MIN_INTERVAL_S:
+                return False
+            self._peer_md_reload_times[peer_name] = now
+        try:
+            ri = self._registrar.get_peer_rank_info(
+                write_meta.peer_instance, write_meta.peer_rank
+            )
+        except Exception:
+            logger.warning(
+                f"_try_recover_peer_agent: no registered RankInfo for peer "
+                f"{peer_name}; cannot reload metadata"
+            )
+            return False
+        # Do NOT invalidate here: NIXL auto-invalidates the remote MD when a
+        # transfer to it fails (nixlAgentData::invalidateRemoteData inside
+        # getXferStatus), so an explicit invalidate races that path and
+        # double-destroys UCX rkeys -> segfault in ucp_rkey_destroy (observed
+        # crashing a ctx worker, job 889929). Re-loading the blob is enough.
+        self._agent.load_remote_agent(peer_name, ri.transfer_engine_info)
+        with self._loaded_remote_agents_lock:
+            self._loaded_remote_agents.add(peer_name)
+        logger.warning(
+            f"_try_recover_peer_agent: reloaded NIXL metadata for peer "
+            f"{peer_name} after transfer failure"
+        )
+        return True
+
     @nvtx_range("_deliver_kv_to_agent")
     def _deliver_kv_to_agent(self, write_meta: WriteMeta):
         assert write_meta.src_ptrs.size == write_meta.dst_ptrs.size == write_meta.sizes.size, (
@@ -514,10 +619,25 @@ class Sender(SenderBase):
             request = Sender._make_agent_request(write_meta, device_id=self._device_id)
             if timer:
                 timer.record_transfer_start(write_meta.peer_rank)
-            status = self._agent.submit_transfer_requests(request)
-            if not status.wait():
+            # Single attempt guarded by the per-peer circuit breaker. Do NOT
+            # retry against the same peer here: NIXL auto-invalidates the
+            # peer MD on failure and that path is crash-prone under repeated
+            # concurrent failures; rerouting happens at the orchestrator.
+            last_error = None
+            if self._is_peer_tripped(write_meta.peer_name):
+                last_error = "peer circuit breaker open (quarantined)"
+            else:
+                with self._peer_nixl_lock(write_meta.peer_name):
+                    try:
+                        status = self._agent.submit_transfer_requests(request)
+                        if not status.wait():
+                            last_status = getattr(status, "last_status_str", lambda: "<no detail>")()
+                            last_error = f"nixl_status={last_status}"
+                    except Exception as e:
+                        last_error = f"submit raised: {e}"
+                self._record_peer_result(write_meta.peer_name, last_error is None)
+            if last_error is not None:
                 agent_result = AgentResult.FAILED
-                last_status = getattr(status, "last_status_str", lambda: "<no detail>")()
                 agent_name = getattr(self._agent, "name", "<?>")
                 detail = (
                     f"KV transfer agent failed: "
@@ -529,7 +649,7 @@ class Sender(SenderBase):
                     f"remote={getattr(request, 'remote_name', '?')} "
                     f"src_size={int(write_meta.src_ptrs.size)} "
                     f"dst_size={int(write_meta.dst_ptrs.size)} "
-                    f"nixl_status={last_status} agent={agent_name}"
+                    f"{last_error} agent={agent_name}"
                 )
                 logger.error(detail)
                 task.fail(RuntimeError(detail))
@@ -594,9 +714,21 @@ class Sender(SenderBase):
             request = Sender._make_agent_request(write_meta, device_id=self._device_id)
             if timer:
                 timer.record_transfer_start(write_meta.peer_rank)
-            if not self._agent.submit_transfer_requests(request).wait():
+            # Same breaker-guarded single attempt as _deliver_kv_to_agent.
+            last_error = None
+            if self._is_peer_tripped(write_meta.peer_name):
+                last_error = "peer circuit breaker open (quarantined)"
+            else:
+                with self._peer_nixl_lock(write_meta.peer_name):
+                    try:
+                        if not self._agent.submit_transfer_requests(request).wait():
+                            last_error = "agent request failed"
+                    except Exception as e:
+                        last_error = f"submit raised: {e}"
+                self._record_peer_result(write_meta.peer_name, last_error is None)
+            if last_error is not None:
                 agent_result = AgentResult.FAILED
-                session.set_exception("aux transfer agent request failed")
+                session.set_exception(f"aux transfer agent request failed: {last_error}")
             if timer:
                 timer.record_transfer_end(write_meta.peer_rank)
 
@@ -825,6 +957,7 @@ class Sender(SenderBase):
             unique_rid=task._unique_rid,
             slice_id=task.slice_id,
             is_last_slice=task._slice.is_last_slice,
+            peer_instance=peer_ri.instance_name,
         )
 
     def _build_aux_write_meta(self, task: AuxSendTask, req_info: RecvReqInfo) -> WriteMeta:
@@ -866,6 +999,7 @@ class Sender(SenderBase):
             peer_endpoint=peer_ri.self_endpoint,
             unique_rid=task._unique_rid,
             meta_type=WriteMetaType.AUX,
+            peer_instance=req_info.instance_name,
         )
 
     def dispatch_task(
@@ -927,10 +1061,30 @@ class Sender(SenderBase):
 
         agent_name = ri.instance_name + str(ri.instance_rank)
         logger.debug(f"Loading remote transfer agent descriptor for peer '{agent_name}'")
-        self._agent.load_remote_agent(
-            ri.instance_name + str(ri.instance_rank),
-            ri.transfer_engine_info,
-        )
+        # Registration is one-shot (the peer never re-sends REGISTER_RANK_INFO),
+        # so a swallowed load failure here used to leave a half-registered peer
+        # whose every transfer died at createXferReq with NIXL_ERR_NOT_FOUND.
+        # Retry a few times; on final failure undo the registration so the
+        # failure surfaces at peer lookup instead of deep inside NIXL.
+        load_error = None
+        for attempt in range(3):
+            try:
+                self._agent.load_remote_agent(agent_name, ri.transfer_engine_info)
+                load_error = None
+                break
+            except Exception as e:
+                load_error = e
+                logger.warning(
+                    f"load_remote_agent failed for peer '{agent_name}' "
+                    f"(attempt {attempt + 1}/3): {e}"
+                )
+                time.sleep(0.1 * (attempt + 1))
+        if load_error is not None:
+            self._registrar.unregister(ri.instance_name, ri.instance_rank)
+            raise RuntimeError(
+                f"failed to load remote agent metadata for peer '{agent_name}' "
+                f"after 3 attempts; registration rolled back"
+            ) from load_error
         with self._loaded_remote_agents_lock:
             self._loaded_remote_agents.add(agent_name)
         logger.debug(
@@ -1850,6 +2004,17 @@ class RxSession(RxSessionBase):
         cancel_request() must return False while this is True.
         """
         return any(t.status == TaskStatus.TRANSFERRING for t in self._kv_tasks)
+
+    def set_exception(self, reason: str = ""):
+        msg = f"RxSession {self.disagg_request_id} exception"
+        if reason:
+            msg += f": {reason}"
+        with self.lock:
+            self._exception = RuntimeError(msg)
+            self._terminal_status = SessionStatus.ERROR
+            for task in self._kv_tasks:
+                if not task.is_done:
+                    task.fail(self._exception)
 
     def wait_complete(self, blocking: bool = False) -> Optional[WaitResult]:
         """Poll or block until transfer completes.

@@ -220,10 +220,15 @@ class DisaggTransferAdmissionController:
 
     def _estimate_active_transfer_blocks(
             self, active_requests: Iterable[LlmRequest]) -> int:
+        # Timed-out transfers are being torn down and may linger in the
+        # in-progress state while cancel retries; counting them would let a
+        # few hung transfers permanently exhaust the budget and starve all
+        # future gen-init admissions.
         return sum(
             self._estimate_request_blocks(request)
             for request in active_requests
-            if request.is_disagg_generation_transmission_in_progress)
+            if request.is_disagg_generation_transmission_in_progress
+            and not request.py_kv_transfer_timed_out)
 
     def select(self, active_requests: Iterable[LlmRequest],
                candidates: List[LlmRequest]) -> DisaggTransferAdmissionResult:
@@ -2813,6 +2818,7 @@ class PyExecutor:
                          f"admitted transfer blocks="
                          f"{admission_result.admitted_transfer_blocks}, "
                          f"budget={controller.max_transfer_blocks}")
+        self._warn_if_admission_starved(admission_result, controller)
 
         self._revert_deferred_disagg_gen_init_alloc(
             fitting_disagg_gen_init_requests,
@@ -2820,6 +2826,44 @@ class PyExecutor:
 
         return (admission_result.admitted_requests,
                 admission_result.is_blocked_by_active_transfers())
+
+    _ADMISSION_STARVED_WARN_INTERVAL_S = 30.0
+
+    def _warn_if_admission_starved(
+            self, admission_result: DisaggTransferAdmissionResult,
+            controller: DisaggTransferAdmissionController) -> None:
+        """Warn when the transfer-admission budget starves ALL gen-init
+        candidates for a sustained period.
+
+        Sustained total starvation means the budget is held by transfers
+        that are not completing (e.g. hung sessions to an unreachable peer)
+        — a wedged-server condition that is otherwise completely silent:
+        the "may not have enough kvCache" idle warning is skipped on the
+        admission-blocked branch.
+        """
+        starved = (admission_result.limited_by_budget
+                   and not admission_result.admitted_requests)
+        if not starved:
+            self._admission_starved_since = None
+            return
+        now = time.monotonic()
+        if getattr(self, "_admission_starved_since", None) is None:
+            self._admission_starved_since = now
+            self._admission_starved_last_log = now
+            return
+        starved_s = now - self._admission_starved_since
+        if (starved_s > self._ADMISSION_STARVED_WARN_INTERVAL_S
+                and now - self._admission_starved_last_log
+                > self._ADMISSION_STARVED_WARN_INTERVAL_S):
+            logger.warning(
+                "Disagg transfer admission has deferred ALL "
+                f"{admission_result.deferred_request_count} gen-init "
+                f"request(s) for {starved_s:.0f}s with no transfer progress; "
+                f"active transfer blocks="
+                f"{admission_result.active_transfer_blocks}, "
+                f"budget={controller.max_transfer_blocks}. Possible hung or "
+                "leaked KV transfers on this server.")
+            self._admission_starved_last_log = now
 
     def _revert_deferred_disagg_gen_init_alloc(
             self, candidates: List[LlmRequest],
@@ -5125,6 +5169,17 @@ class PyExecutor:
 
     @nvtx_range("_check_disagg_gen_cache_transfer_status")
     def _check_disagg_gen_cache_transfer_status(self, atLeastNum: int = 0):
+        # Cancel timed-out generation transfers here (reached from the loop
+        # top every iteration) and not only in _handle_responses: a gen
+        # server that cannot schedule any batch never reaches
+        # _handle_responses, so transfer cleanup must not depend on forward
+        # progress. Otherwise hung transfers pin their requests forever and
+        # wedge the server (no admission -> no batch -> no cleanup).
+        for req in self.active_requests:
+            if (req.py_kv_transfer_timed_out
+                    and req.is_disagg_generation_transmission_in_progress):
+                if self.kv_cache_transceiver.cancel_request(req):
+                    req.state = LlmRequestState.DISAGG_TRANS_ERROR
         result = self.kv_cache_transceiver.check_gen_transfer_status(atLeastNum)
         if isinstance(result, tuple):
             _, _, cancelled_reqs = result

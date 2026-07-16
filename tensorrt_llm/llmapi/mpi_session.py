@@ -607,7 +607,11 @@ def split_mpi_env(mpi_env_keys: List[str] | None = None) -> Tuple[dict, dict]:
                 'PMI_',
                 'SLURM_',
                 'MPI_',
-                'UCX_',
+                # NOTE: UCX_ is deliberately NOT stripped. The NIXL transfer
+                # agent (disaggregated KV transfer) runs UCX inside the worker
+                # process; stripping UCX_* here made worker-side UCX
+                # unconfigurable (e.g. UCX_NET_DEVICES pinning on mixed
+                # RoCE/IB nodes, root cause of the one-dead-gen-per-run bug).
                 'I_MPI_',
                 'HYDRA_',
                 'KMP_',
