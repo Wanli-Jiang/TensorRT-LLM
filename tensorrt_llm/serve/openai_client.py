@@ -116,7 +116,15 @@ class OpenAIHttpClient(OpenAIClient):
                 # Set keepalive_timeout below the server-side keepalive timeout to avoid reusing stale connections.
                 keepalive_timeout=1,
             ),
-            timeout=aiohttp.ClientTimeout(total=timeout_secs),
+            # sock_read (inactivity) rather than total: a total timeout also
+            # counts time spent streaming the response body, so any healthy
+            # stream longer than timeout_secs is killed mid-flight — and a
+            # partially-streamed response cannot be retried. With sock_read,
+            # a stalled server still times out after timeout_secs of silence
+            # while long-running streams proceed as long as data flows.
+            timeout=aiohttp.ClientTimeout(total=None,
+                                          connect=timeout_secs,
+                                          sock_read=timeout_secs),
         )
         self._max_retries = max_retries
         self._retry_interval_sec = retry_interval_sec
