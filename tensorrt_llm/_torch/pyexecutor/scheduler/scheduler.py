@@ -376,6 +376,7 @@ class BindMicroBatchScheduler(MicroBatchScheduler):
         max_batch_size: int,
         max_num_tokens: int = None,
         ctx_chunk_config: Optional[tuple[StrEnum, int]] = None,
+        max_total_draft_tokens: int = 0,
     ) -> None:
         super(BindMicroBatchScheduler, self).__init__()
         self.max_batch_size = max_batch_size
@@ -387,7 +388,27 @@ class BindMicroBatchScheduler(MicroBatchScheduler):
                 ctx_chunk_config[0]._to_pybind(), ctx_chunk_config[1]
             )
 
-        self.impl = tb_internal.algorithms.MicroBatchScheduler(ctx_chunk_config_cpp, max_num_tokens)
+        try:
+            self.impl = tb_internal.algorithms.MicroBatchScheduler(
+                ctx_chunk_config_cpp,
+                max_num_tokens,
+                max_total_draft_tokens=max_total_draft_tokens,
+            )
+        except TypeError:
+            # Older prebuilt bindings lack the max_total_draft_tokens
+            # parameter; their token budget undercounts draft tokens (the
+            # engine packs (1 + max_total_draft_tokens) per generation
+            # request), which can overflow max_num_tokens under speculative
+            # decoding with chunked prefill.
+            if max_total_draft_tokens > 0:
+                logger.warning(
+                    "MicroBatchScheduler binding does not support "
+                    "max_total_draft_tokens; scheduler token budget will not "
+                    "reserve draft tokens (rebuild the C++ bindings to fix)."
+                )
+            self.impl = tb_internal.algorithms.MicroBatchScheduler(
+                ctx_chunk_config_cpp, max_num_tokens
+            )
 
     def schedule(
         self, active_requests: RequestList, inflight_request_ids: set[int]
@@ -476,12 +497,14 @@ class PyMicroBatchScheduler(MicroBatchScheduler):
         ctx_chunk_config: Optional[ContextChunkingConfig] = None,
         no_schedule_until_state: LlmRequestState = LlmRequestState.CONTEXT_INIT,
         no_schedule_after_state: LlmRequestState = LlmRequestState.GENERATION_TO_COMPLETE,
+        max_total_draft_tokens: int = 0,
     ):
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_num_tokens = max_num_tokens
         self.ctx_chunk_config = ctx_chunk_config
         self.max_context_length = max_num_tokens
+        self.max_total_draft_tokens = max_total_draft_tokens
         # Match C++ MicroBatchScheduler defaults (see algorithms.cpp line 68-70)
         self.no_schedule_until_state = no_schedule_until_state
         self.no_schedule_after_state = no_schedule_after_state
@@ -490,6 +513,20 @@ class PyMicroBatchScheduler(MicroBatchScheduler):
         self._no_schedule_after_state_value = no_schedule_after_state.value
         self._context_init_state_value = LlmRequestState.CONTEXT_INIT.value
         self._encoder_init_state_value = LlmRequestState.ENCODER_INIT.value
+
+    def _draft_token_budget(self, req: LlmRequest) -> int:
+        """Worst-case per-iteration draft-token contribution for budgeting.
+
+        Live draft tokens can be absent at scheduling time (e.g. one-model
+        speculation such as vanilla MTP, where no drafter pre-attaches dummy
+        drafts before the scheduler runs), while the engine still packs
+        (1 + max_total_draft_tokens) tokens per generation request. Budgeting
+        by the live count alone lets context chunks overflow max_num_tokens
+        and trip the engine's total_num_tokens assert.
+        """
+        if getattr(req, "py_disable_speculative_decoding", False):
+            return req.num_draft_tokens
+        return max(req.num_draft_tokens, self.max_total_draft_tokens)
 
     def _can_be_scheduled(self, req: LlmRequest) -> bool:
         """
@@ -604,9 +641,7 @@ class PyMicroBatchScheduler(MicroBatchScheduler):
                     req.context_chunk_size = req.context_remaining_length
 
                     draft_tokens = (
-                        req.num_draft_tokens
-                        if (req.is_last_context_chunk and req.has_draft_tokens())
-                        else 0
+                        self._draft_token_budget(req) if req.is_last_context_chunk else 0
                     )
                     # Compute cost: context compute + draft tokens
                     # (reusable tokens only offset context tokens, not draft tokens)
@@ -632,7 +667,7 @@ class PyMicroBatchScheduler(MicroBatchScheduler):
                 # C++ uses getBeamWidthByIter() which returns dynamic beam width
                 # during beam search (1->2->3->...->beamWidth)
                 beam_width = req.get_beam_width_by_iter(for_next_iteration=False)
-                req_num_tokens = beam_width + req.num_draft_tokens
+                req_num_tokens = beam_width + self._draft_token_budget(req)
 
                 if max_num_tokens is not None and (
                     batch_num_tokens + req_num_tokens > max_num_tokens
@@ -1815,6 +1850,7 @@ class SimpleUnifiedScheduler(RequestScheduler):
         scheduler_capacity: Optional[int] = None,
         no_schedule_until_state: LlmRequestState = LlmRequestState.CONTEXT_INIT,
         enable_prefix_aware_scheduling: bool = True,
+        max_total_draft_tokens: int = 0,
     ) -> None:
         # Use scheduler_capacity if provided, otherwise fall back to max_batch_size
         # scheduler_capacity may differ from max_batch_size (e.g., adjusted for attention_dp + disagg)
@@ -1855,6 +1891,7 @@ class SimpleUnifiedScheduler(RequestScheduler):
             max_num_tokens=max_num_tokens,
             ctx_chunk_config=py_chunk_config,
             no_schedule_until_state=no_schedule_until_state,
+            max_total_draft_tokens=max_total_draft_tokens,
         )
 
     def schedule_request(

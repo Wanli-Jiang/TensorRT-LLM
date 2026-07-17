@@ -2245,6 +2245,8 @@ def create_py_executor_instance(
             cross_kv_cache_manager=cross_kv_cache_manager,
             no_schedule_until_state=no_schedule_until_state,
             enable_prefix_aware_scheduling=enable_prefix_aware_scheduling,
+            max_total_draft_tokens=spec_config.max_total_draft_tokens
+            if spec_config is not None else 0,
         )
     elif (scheduler_config is not None
           and scheduler_config.use_python_scheduler):
@@ -2264,6 +2266,8 @@ def create_py_executor_instance(
             scheduler_capacity=scheduler_capacity,
             no_schedule_until_state=no_schedule_until_state,
             enable_prefix_aware_scheduling=enable_prefix_aware_scheduling,
+            max_total_draft_tokens=spec_config.max_total_draft_tokens
+            if spec_config is not None else 0,
         )
     else:
         enable_prefix_aware_scheduling = (
@@ -2281,8 +2285,12 @@ def create_py_executor_instance(
             enable_prefix_aware_scheduling=enable_prefix_aware_scheduling,
         )
 
-        mb_scheduler = BindMicroBatchScheduler(max_batch_size, max_num_tokens,
-                                               ctx_chunk_config)
+        mb_scheduler = BindMicroBatchScheduler(
+            max_batch_size,
+            max_num_tokens,
+            ctx_chunk_config,
+            max_total_draft_tokens=spec_config.max_total_draft_tokens
+            if spec_config is not None else 0)
 
         reorder_policy_config = llm_args.reorder_policy_config
         if reorder_policy_config is not None:

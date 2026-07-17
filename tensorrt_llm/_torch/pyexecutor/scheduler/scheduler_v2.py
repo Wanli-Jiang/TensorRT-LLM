@@ -152,8 +152,10 @@ class KVCacheV2Scheduler(RequestScheduler):
         draft_kv_cache_manager: object | None = None,  # KVCacheManagerV2 for MTP draft layers
         cross_kv_cache_manager: object | None = None,  # KVCacheManagerV2 for enc-dec cross-attn
         enable_prefix_aware_scheduling: bool = True,
+        max_total_draft_tokens: int = 0,
     ) -> None:
         self.max_num_tokens = max_num_tokens
+        self.max_total_draft_tokens = max_total_draft_tokens
         self.max_num_requests = (
             scheduler_capacity if scheduler_capacity is not None else max_batch_size
         )
@@ -217,6 +219,20 @@ class KVCacheV2Scheduler(RequestScheduler):
         self._prioritize_first_token_gen = (
             os.environ.get("TLLM_DISAGG_GEN_PRIORITIZE_FIRST_TOKEN", "0") == "1"
         )
+
+    def _draft_token_budget(self, req: LlmRequest) -> int:
+        """Worst-case per-iteration draft-token contribution for budgeting.
+
+        Live draft tokens can be absent at scheduling time (e.g. one-model
+        speculation such as vanilla MTP, where no drafter pre-attaches dummy
+        drafts before the scheduler runs), while the engine still packs
+        (1 + max_total_draft_tokens) tokens per generation request. Budgeting
+        by the live count alone lets context chunks overflow max_num_tokens
+        and trip the engine's total_num_tokens assert.
+        """
+        if getattr(req, "py_disable_speculative_decoding", False):
+            return get_draft_token_length(req)
+        return max(get_draft_token_length(req), self.max_total_draft_tokens)
 
     def schedule_request(
         self, active_requests: RequestList, inflight_request_ids: set[int]
@@ -522,7 +538,7 @@ class KVCacheV2Scheduler(RequestScheduler):
         Returns ``(action, tokens, chunking_flag)``.
         """
         pre_prepare_context_tokens = req.context_remaining_length
-        draft_len = get_draft_token_length(req)
+        draft_len = self._draft_token_budget(req)
         if not self.enable_prefix_aware_scheduling:
             req_tokens = pre_prepare_context_tokens + draft_len
             if not budget.can_fit_tokens(req_tokens):
@@ -645,7 +661,7 @@ class KVCacheV2Scheduler(RequestScheduler):
         chunk_tokens = budget_chunk_size
         resize_tokens = req.context_chunk_size
         if req.is_last_context_chunk:
-            draft_len = get_draft_token_length(req)
+            draft_len = self._draft_token_budget(req)
             if draft_len > 0:
                 chunk_tokens += draft_len
                 resize_tokens += draft_len
@@ -938,7 +954,7 @@ class KVCacheV2Scheduler(RequestScheduler):
         *tokens* is meaningful only when *action* is ``SCHEDULED``.
         """
         beam_width = req.get_beam_width_by_iter(for_next_iteration=False)
-        req_tokens = beam_width + get_draft_token_length(req)
+        req_tokens = beam_width + self._draft_token_budget(req)
 
         if not budget.can_fit_tokens(req_tokens):
             return ScheduleAction.STOP, 0, scheduled_beam_width, req_it_end

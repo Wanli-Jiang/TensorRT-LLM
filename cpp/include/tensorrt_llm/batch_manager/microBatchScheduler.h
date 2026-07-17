@@ -53,7 +53,8 @@ public:
     explicit MicroBatchScheduler(std::optional<batch_scheduler::ContextChunkingConfig> ctxChunkConfig = std::nullopt,
         std::optional<SizeType32> maxContextLength = std::nullopt,
         LlmRequestState noScheduleUntilState = LlmRequestState::kCONTEXT_INIT,
-        LlmRequestState noScheduleAfterState = LlmRequestState::kGENERATION_TO_COMPLETE);
+        LlmRequestState noScheduleAfterState = LlmRequestState::kGENERATION_TO_COMPLETE,
+        SizeType32 maxTotalDraftTokens = 0);
 
     std::tuple<RequestVector, RequestVector> operator()(RequestVector& activeRequests, ReqIdsSet const& inflightReqIds,
         SizeType32 maxBatchSizeRuntime, std::optional<SizeType32> maxNumTokensRuntime) const;
@@ -80,9 +81,21 @@ private:
 
     std::optional<batch_scheduler::ContextChunkingConfig> mCtxChunkConfig;
 
+    /// Worst-case draft-token budget for a request this iteration. Live draft
+    /// tokens can be absent at scheduling time (e.g. one-model speculation such
+    /// as vanilla MTP, where no drafter pre-attaches dummy drafts), while the
+    /// engine still packs (1 + maxTotalDraftTokens) tokens per generation
+    /// request; budgeting by the live count alone lets context chunks overflow
+    /// maxNumTokens.
+    [[nodiscard]] SizeType32 draftTokenBudget(std::shared_ptr<LlmRequest> const& llmReq) const;
+
     /// The state until/after which the scheduler should not schedule requests
     LlmRequestState mNoScheduleUntilState;
     LlmRequestState mNoScheduleAfterState;
+
+    /// Maximum number of draft tokens the engine may pack per generation
+    /// request in one iteration (0 when speculative decoding is off).
+    SizeType32 mMaxTotalDraftTokens{0};
 };
 
 } // namespace tensorrt_llm::batch_manager

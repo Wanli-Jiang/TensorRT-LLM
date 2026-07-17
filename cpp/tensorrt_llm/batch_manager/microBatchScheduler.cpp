@@ -45,12 +45,19 @@ static SizeType32 reuse_adjusted_compute(SizeType32 chunkSize, SizeType32 reusab
 
 MicroBatchScheduler::MicroBatchScheduler(std::optional<batch_scheduler::ContextChunkingConfig> ctxChunkConfig,
     std::optional<SizeType32> maxContextLength, LlmRequestState noScheduleUntilState,
-    LlmRequestState noScheduleAfterState)
+    LlmRequestState noScheduleAfterState, SizeType32 maxTotalDraftTokens)
     : mMaxContextLength(maxContextLength)
     , mCtxChunkConfig(ctxChunkConfig)
     , mNoScheduleUntilState(noScheduleUntilState)
     , mNoScheduleAfterState(noScheduleAfterState)
+    , mMaxTotalDraftTokens(maxTotalDraftTokens)
 {
+}
+
+SizeType32 MicroBatchScheduler::draftTokenBudget(std::shared_ptr<LlmRequest> const& llmReq) const
+{
+    auto const liveDraftTokens = llmReq->hasDraftTokens() ? llmReq->getNumDraftTokens() : 0;
+    return std::max(liveDraftTokens, mMaxTotalDraftTokens);
 }
 
 void MicroBatchScheduler::fitDraftTokens(RequestVector& contextsToBeChunked,
@@ -361,7 +368,7 @@ std::tuple<RequestVector, RequestVector> MicroBatchScheduler::operator()(Request
             {
                 constexpr SizeType32 beam{0};
                 SizeType32 const contextTokens = llmReq->getNumTokens(beam);
-                SizeType32 const draftTokens = llmReq->hasDraftTokens() ? llmReq->getNumDraftTokens() : 0;
+                SizeType32 const draftTokens = draftTokenBudget(llmReq);
                 reqNumTokens = contextTokens + draftTokens;
                 SizeType32 const contextCompute
                     = reuse_adjusted_compute(contextTokens, reusable, llmReq->getContextRemainingLength());
@@ -380,8 +387,7 @@ std::tuple<RequestVector, RequestVector> MicroBatchScheduler::operator()(Request
             else
             {
                 llmReq->setContextChunkSize(llmReq->getContextRemainingLength());
-                auto const draftTokens
-                    = (llmReq->isLastContextChunk() && llmReq->hasDraftTokens()) ? llmReq->getNumDraftTokens() : 0;
+                auto const draftTokens = llmReq->isLastContextChunk() ? draftTokenBudget(llmReq) : 0;
                 SizeType32 const contextCompute = reuse_adjusted_compute(
                     llmReq->getContextChunkSize(), reusable, llmReq->getContextRemainingLength());
                 SizeType32 computeTokens = contextCompute + draftTokens;
@@ -404,7 +410,7 @@ std::tuple<RequestVector, RequestVector> MicroBatchScheduler::operator()(Request
         else // (llmReq->isGenerationInProgressState())
         {
             auto const reqBeamWidth = llmReq->getBeamWidthByIter();
-            reqNumTokens = reqBeamWidth + llmReq->getNumDraftTokens();
+            reqNumTokens = reqBeamWidth + draftTokenBudget(llmReq);
             if (maxNumTokensRuntime && batchNumTokens + reqNumTokens > maxNumTokensRuntime.value())
             {
                 break;
