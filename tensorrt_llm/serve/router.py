@@ -168,6 +168,13 @@ class KvCacheAwareServerState(ServerState):
     def _resolve_hash_algo(self, hash_algo: Optional[str]) -> str:
         return self._kv_cache_hash_algo if hash_algo is None else hash_algo
 
+    def clear_cache_view(self):
+        """Drop all block hashes believed cached on this server. The view is
+        speculative (populated by routed-block tracking and event deltas, never
+        resynced from a snapshot), so callers use this to recover from drift."""
+        for block_table in self._kv_cache_block_tables.values():
+            block_table.clear()
+
     def add_blocks(self,
                    block_hashes: Iterable[BlockHash],
                    hash_algo: Optional[str] = None):
@@ -368,6 +375,13 @@ class Router(ABC):
         self._health_check_timeout = metadata_server_cfg.health_check_timeout if metadata_server_cfg else None
         self._server_preparation_func = server_preparation_func
         self._prepared_ready_servers: set[str] = set()
+
+    async def reset_routing_state(self):
+        """Discard learned routing state (cache-view bookkeeping, conversation
+        affinity pins) so decisions made under a different traffic pattern
+        (e.g. a warm-up/smoke phase) cannot bias subsequent routing. In-flight
+        load counters are intentionally untouched — they self-heal as requests
+        finish. Default is a no-op; stateful routers override."""
 
     async def close(self):
         """Close the shared HTTP session."""
@@ -1034,6 +1048,21 @@ class KvCacheAwareRouter(BlockHashMixin, LoadBalancingMixin, Router):
         return KvCacheAwareServerState(server, self._use_tokens,
                                        self._tokens_per_block,
                                        lambda: self.session)
+
+    async def reset_routing_state(self):
+        """Clear the speculative cache view, pending routed-block records and
+        conversation-affinity pins. State learned under one traffic pattern
+        (e.g. a smoke phase that only this router instance served) otherwise
+        persists indefinitely: affinity pins override scoring for returning
+        conversations, and the block view is never resynced from a snapshot,
+        so drift is permanent until process restart."""
+        async with self._lock:
+            for state in self._server_state.values():
+                state.clear_cache_view()
+            self._pending_routed_blocks.clear()
+            affinity = getattr(self, "_route_affinity", None)
+            if affinity is not None:
+                affinity.clear()
 
     async def close(self):
         for state in self._server_state.values():

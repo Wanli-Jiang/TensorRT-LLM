@@ -165,6 +165,7 @@ class OpenAIDisaggServer:
         self.app.add_api_route("/cluster_info", self.cluster_info, methods=["GET"])
         self.app.add_api_route("/version", self.version, methods=["GET"])
         self.app.add_api_route("/perf_metrics", self._perf_metrics_collector.get_perf_metrics, methods=["GET"])
+        self.app.add_api_route("/reset_routing_state", self.reset_routing_state, methods=["POST"])
         # import prometheus_client lazily to break the `set_prometheus_multiproc_dir`
         from prometheus_client import make_asgi_app
         self.app.mount("/prometheus/metrics", make_asgi_app())
@@ -226,6 +227,16 @@ class OpenAIDisaggServer:
 
     async def cluster_info(self) -> JSONResponse:
         return JSONResponse(content=await self._service.cluster_info())
+
+    async def reset_routing_state(self) -> JSONResponse:
+        """Drop learned routing state (cache-view bookkeeping, conversation
+        affinity pins) on both routers. Meant to be called between traffic
+        phases (e.g. after a warm-up/smoke pass) so routing decisions made
+        under a different load pattern cannot bias what follows. In-flight
+        request load counters are untouched."""
+        await self._ctx_router.reset_routing_state()
+        await self._gen_router.reset_routing_state()
+        return JSONResponse(content={"status": "ok"})
 
     async def version(self) -> JSONResponse:
         return JSONResponse(content={"version": VERSION})
