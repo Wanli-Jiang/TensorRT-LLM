@@ -593,7 +593,16 @@ class KVCacheV2Scheduler(RequestScheduler):
         remaining_budget = budget.remaining_tokens
         pre_prepare_context_remaining = req.context_remaining_length
 
-        if remaining_budget is not None and remaining_budget <= 0:
+        # Budget gate BEFORE prepare_context: preparation (KV cache creation,
+        # block-reuse radix match, resume) costs tens of milliseconds for a
+        # long prompt, and once the token budget cannot fit even one chunk
+        # unit no later context request can be scheduled this iteration —
+        # paying the preparation cost for each of them is pure waste.
+        # FORCE_CHUNK is exempt: its chunk size is not budget-driven.
+        if remaining_budget is not None and (
+            remaining_budget <= 0
+            or (remaining_budget < self.chunk_unit_size and not self._is_force_chunking_policy())
+        ):
             return ScheduleAction.SKIP, 0, False
 
         # Prepare context (create _KVCache, block reuse, resume — no resize)
