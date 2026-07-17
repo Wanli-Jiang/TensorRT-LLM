@@ -107,6 +107,18 @@ PRUNE_STALE_SSM_SNAPSHOTS: Final[bool] = (
     os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PRUNE_STALE_SNAPSHOTS", "1") == "1"
 )
 
+# Place SSM snapshots directly on the first non-GPU cache tier (host) instead
+# of GPU-first. A parked conversation's snapshot then costs zero GPU SSM slots
+# between turns; the next turn recalls it over PCIe (~milliseconds for a
+# ~200MB Mamba state vs multi-second think time). Frees (parked_slots x
+# slot_bytes) of GPU memory for attention KV / larger live batches. Applies to
+# save-last-snapshot mode only (ssm_reuse_interval == 0); interval snapshots
+# stay GPU-first because they serve mid-sequence reuse. Falls back to GPU when
+# no non-GPU tier has room.
+PARK_SSM_SNAPSHOTS_TO_HOST: Final[bool] = (
+    os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PARK_SSM_TO_HOST", "0") == "1"
+)
+
 
 @dataclass(slots=True)
 class SeqBlock:
@@ -1319,9 +1331,18 @@ class _KVCache:
         ssm_lock = expect_type(_SharedPageLock, self._ssm_blocks[beam_idx][ssm_lc_id])
         src_page = ssm_lock.page
         pg_idx = storage.get_pool_group_index(ssm_lc_id)
-        # Try to find a slot in any cache level, starting from the source page's level
-        for i in range(storage.num_cache_levels):
-            lvl = CacheLevel(i + src_page.cache_level)
+        # Try to find a slot in any cache level, starting from the source page's level.
+        # With PARK_SSM_SNAPSHOTS_TO_HOST, non-GPU tiers are tried first (GPU as
+        # last resort) so parked snapshots don't occupy GPU SSM slots between turns.
+        candidate_levels = list(range(src_page.cache_level, storage.num_cache_levels))
+        if (
+            PARK_SSM_SNAPSHOTS_TO_HOST
+            and self.manager.ssm_reuse_interval == 0
+            and len(candidate_levels) > 1
+        ):
+            candidate_levels = candidate_levels[1:] + candidate_levels[:1]
+        for lvl_i in candidate_levels:
+            lvl = CacheLevel(lvl_i)
             try:
                 new_slot = storage.new_slots_for_pool_group(lvl, pg_idx, 1)[0]
             except OutOfPagesError:
