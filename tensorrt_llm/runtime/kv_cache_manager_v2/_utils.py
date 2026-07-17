@@ -105,7 +105,20 @@ def exact_div(x: int, y: int) -> int:
 
 Idx = TypeVar("Idx", bound=int)
 
+try:
+    from mypy_extensions import mypyc_attr
+except ImportError:  # mypy_extensions only matters when compiling with mypyc
 
+    def mypyc_attr(**_kwargs: bool):  # type: ignore[misc]
+        def deco(cls: type) -> type:
+            return cls
+
+        return deco
+
+
+# native_class=False: mypyc cannot compile classes inheriting from builtin
+# tuple; keep this one as a regular Python class inside the compiled module.
+@mypyc_attr(native_class=False)
 class HalfOpenRange(tuple[Idx, Idx], Generic[Idx]):
     """A half-open range [beg, end). Falsy when empty (beg >= end).
     Generic over index type. Supports unpacking into (beg, end)."""

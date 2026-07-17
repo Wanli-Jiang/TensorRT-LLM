@@ -199,6 +199,15 @@ IndexSeq = array.array | memoryview
 # three lengths equal to the number of reused tokens.
 # TODO: in __del__, we should check if committed pages are usable for SWA cases. e.g. all pages are
 # dropped except the last one. The last one is not usable.
+class _DeltaScratchSlots(NamedTuple):
+    """Result of _KVCache._take_excess_scratch_slots. Module-level because
+    mypyc cannot compile classes defined inside a class body."""
+
+    excess: TypedIndexList[LifeCycleId, list[ScratchSlotLock]]
+    delta_cnt: TypedIndexList[LifeCycleId, int]
+    scratch_ranges: TypedIndexList[LifeCycleId, HalfOpenRange[BlockOrdinal]]
+
+
 class _KVCache:
     __slots__ = (
         "id",
@@ -231,6 +240,7 @@ class _KVCache:
 
     Status: ClassVar[Type[_Status]] = _Status
     CommitState: ClassVar[Type[_CommitState]] = _CommitState
+    DeltaScratchSlots: ClassVar[Type[_DeltaScratchSlots]] = _DeltaScratchSlots
 
     id: int | None
     _manager: "KVCacheManager"
@@ -1113,9 +1123,9 @@ class _KVCache:
                 self, tasks, self._record_migrated_slots, self._record_dropped_pages
             )
         except OutOfPagesError:
-            for lc_idx, slot in typed_enumerate(deferred_slots):
-                if slot is not None:
-                    storage.release_slot(lc_idx, GPU_LEVEL, slot)
+            for lc_idx, deferred_slot in typed_enumerate(deferred_slots):
+                if deferred_slot is not None:
+                    storage.release_slot(lc_idx, GPU_LEVEL, deferred_slot)
             return False
 
         # Replace all holders with locks.
@@ -1149,10 +1159,9 @@ class _KVCache:
                 if lc_idx == ssm_lc_id:
                     if self.num_committed_tokens == 0:
                         continue  # fresh SSM — no source to copy from
-                    lock = self._ssm_blocks[beam_idx][lc_idx]
+                    lock = expect_type(_SharedPageLock, self._ssm_blocks[beam_idx][lc_idx])
                 else:
-                    lock = self._block(last_ordinal, beam_idx)[lc_idx]
-                assert type(lock) is _SharedPageLock
+                    lock = expect_type(_SharedPageLock, self._block(last_ordinal, beam_idx)[lc_idx])
                 # V2 still copies a partial reuse into a private slot before writing to it.
                 # The copy allocates a block, but it is a miss only without a reusable source.
                 has_partial_reuse_source = self._has_reuse_source(lock)
@@ -1572,6 +1581,7 @@ class _KVCache:
             assert self._get_tree_block(ordinal) is tree_block
             self._num_committed_blocks = BlockOrdinal(ordinal + 1)
         elif should_snapshot_ssm:
+            assert ssm_lc_id is not None
             if tree_block.storage[ssm_lc_id] is None:
                 self._snapshot_ssm_to_tree_block(tree_block, ssm_lc_id, beam_idx)
             self._commit_state = self.CommitState.VIRTUAL_STOP
@@ -1580,11 +1590,13 @@ class _KVCache:
             self._commit_state = self.CommitState.VIRTUAL_STOP
 
         if seq_block.is_committed:
-            for lc_idx, lc in self.manager._life_cycles.attention_life_cycles():
-                stale_range = _KVCache._get_stale_range(tokens_per_block, self.history_length, lc)
+            for attn_lc_idx, attn_lc in self.manager._life_cycles.attention_life_cycles():
+                stale_range = _KVCache._get_stale_range(
+                    tokens_per_block, self.history_length, attn_lc
+                )
                 if ordinal in stale_range:
-                    for beam_block in seq_block.pages:
-                        beam_block[lc_idx] = None
+                    for beam_pages in seq_block.pages:
+                        beam_pages[attn_lc_idx] = None
 
         if is_last and self._commit_state == self.CommitState.ALLOWED:
             self._commit_state = self.CommitState.VIRTUAL_STOP
@@ -1667,12 +1679,9 @@ class _KVCache:
             user = lock._user
             self._block(user.ordinal, user.beam_index)[user.life_cycle] = lock
 
-    class DeltaScratchSlots(NamedTuple):
-        excess: TypedIndexList[LifeCycleId, list[ScratchSlotLock]]
-        delta_cnt: TypedIndexList[LifeCycleId, int]
-        scratch_ranges: TypedIndexList[LifeCycleId, HalfOpenRange[BlockOrdinal]]
-
-    def _take_excess_scratch_slots(self, capacity: int, history_length: int) -> DeltaScratchSlots:
+    def _take_excess_scratch_slots(
+        self, capacity: int, history_length: int
+    ) -> "_DeltaScratchSlots":
         """
         Calculate scratch slot requirements and extract excess scratch slots.
 

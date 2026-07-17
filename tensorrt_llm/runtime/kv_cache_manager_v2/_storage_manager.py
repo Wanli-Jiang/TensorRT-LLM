@@ -434,7 +434,7 @@ class StorageManager:
             if drop_recorder is not None:
                 for pg_idx in typed_range(self.num_pool_groups):
                     if evicted[pg_idx]:
-                        drop_recorder(evicted[pg_idx], level)
+                        drop_recorder(cast(Sequence[Page], evicted[pg_idx]), level)
             return
         next_lvl = CacheLevel(level + 1)
         goals = filled_array2d(self.num_cache_levels, self.num_pool_groups, 0)
@@ -495,7 +495,7 @@ class StorageManager:
                 # Record the drop event before releasing — these pages are leaving the
                 # cache hierarchy entirely without being onboarded back to GPU.
                 if drop_recorder is not None and num_evicted > 0:
-                    drop_recorder(evicted[pg_idx], lvl_id)
+                    drop_recorder(cast(Sequence[Page], evicted[pg_idx]), lvl_id)
                 evicted[pg_idx].clear()
                 if not NDEBUG:
                     assert all(p() is None for p in dbg_rawrefs)  # pyright: ignore
