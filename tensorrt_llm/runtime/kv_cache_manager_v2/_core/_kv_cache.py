@@ -743,7 +743,19 @@ class _KVCache:
         new_num_blocks = BlockOrdinal(div_up(capacity, tokens_per_block))
         num_life_cycles = manager._life_cycles.size
         if new_num_blocks < old_num_blocks:
-            assert not self.has_scratch_slots, "Cannot shrink while scratch slots exist"
+            if self.has_scratch_slots:
+                # Forensic detail: which life cycles still hold scratch, and
+                # the resize that tripped it (seen with the mypyc-compiled
+                # module under MTP rewind shrinks; interpreted runs are clean).
+                scratch_counts = [len(s) for s in self._scratch_slots]
+                raise AssertionError(
+                    f"Cannot shrink while scratch slots exist: id={self.id} "
+                    f"scratch_counts={scratch_counts} "
+                    f"capacity={self._capacity}->{capacity} "
+                    f"history_length={history_length} "
+                    f"num_committed={self.num_committed_tokens} "
+                    f"never_resumed={self._never_resumed} "
+                    f"enable_scratch={enable_scratch}")
             self._subtract_pending_allocation_range(new_num_blocks, old_num_blocks)
             with self._record_event():
                 del self._blocks[new_num_blocks:]
