@@ -1,3 +1,4 @@
+import os
 import time
 import uuid
 from collections import defaultdict
@@ -55,7 +56,14 @@ def _find_consensus_request_ids(request_ids_all_ranks, sync_size):
 
 class KvCacheTransceiverV2(KvCacheTransceiver):
     _CONTEXT_RECEIVER_WAIT_TIMEOUT_MULTIPLIER = 10
-    _CONTEXT_RECEIVER_WAIT_TIMEOUT_FLOOR_MS = 600_000
+    # Floor for "receiver never asked for the data" termination. The generous
+    # production default protects slow generation servers, but it also means a
+    # context-only request whose receiver never comes holds its KV/SSM
+    # resources for 10 minutes — a few such requests per second exhaust the
+    # pool. Overridable for calibration/ops via env.
+    _CONTEXT_RECEIVER_WAIT_TIMEOUT_FLOOR_MS = int(
+        os.environ.get("TRTLLM_CONTEXT_RECEIVER_WAIT_TIMEOUT_FLOOR_MS",
+                       "600000"))
     # Minimum time cancel_request keeps retrying before force-failing
     # sessions whose tasks are stuck mid-write (e.g. peer agent unreachable).
     _FORCE_CANCEL_GRACE_FLOOR_MS = 30_000
