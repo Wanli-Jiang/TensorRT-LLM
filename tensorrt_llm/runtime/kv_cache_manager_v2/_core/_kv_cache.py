@@ -1122,6 +1122,11 @@ class _KVCache:
                     )
 
         tasks = list[BatchedLockTarget]()
+        # Destination cells recorded alongside tasks so the holder->lock
+        # replacement below does not re-run the _active_pages() generator and
+        # re-derive every block (this loop runs once per page and dominates
+        # the per-request admission cost for long warm sequences).
+        lock_dests: list[tuple[TypedIndexList[LifeCycleId, BlockPage], LifeCycleId]] = []
         for ordinal, beam_idx, lc_idx in self._active_pages():
             beam_block = (
                 self._block(ordinal, beam_idx)
@@ -1130,6 +1135,7 @@ class _KVCache:
             )
             page = expect_type(_PageHolder, beam_block[lc_idx]).page
             tasks.append(BatchedLockTarget(page, beam_idx, ordinal, lc_idx))
+            lock_dests.append((beam_block, lc_idx))
         try:
             locks = batched_lock_to_gpu(
                 self, tasks, self._record_migrated_slots, self._record_dropped_pages
@@ -1141,14 +1147,8 @@ class _KVCache:
             return False
 
         # Replace all holders with locks.
-        for (ordinal, beam_idx, lc_idx), lock in zip(self._active_pages(), locks):
-            beam_block = (
-                self._block(ordinal, beam_idx)
-                if lc_idx != ssm_lc_id
-                else self._ssm_blocks[beam_idx]
-            )
-            page = expect_type(_PageHolder, beam_block[lc_idx]).page
-            assert page is lock.page
+        for (beam_block, lc_idx), lock in zip(lock_dests, locks):
+            assert NDEBUG or expect_type(_PageHolder, beam_block[lc_idx]).page is lock.page
             beam_block[lc_idx] = lock
 
         # Deferred copy: for partial blocks and SSM, copy from now-locked source pages
@@ -1925,14 +1925,20 @@ class _KVCache:
         self._capacity = num_tokens
         full_reused_end = BlockOrdinal(num_tokens // tokens_per_block)
         has_partial_match = num_tokens % tokens_per_block != 0
-        # fill self._blocks
+        # fill self._blocks. Setup always runs at beam_width == 1 (__init__
+        # sets it before calling here), so the per-block beam/life-cycle cell
+        # lists are built directly — the generic make_typed/filled_list chain
+        # costs a lambda call and two helper frames per block, which dominates
+        # this loop for long matches.
+        assert self.beam_width == 1
+        num_life_cycles = int(life_cycles.size)
         self._blocks = to_typed(
             BlockOrdinalT,
             [
                 SeqBlock(
-                    make_typed(
-                        lambda _: filled_list(cast(BlockPage, None), life_cycles.size),
-                        self.beam_width,
+                    cast(
+                        TypedIndexList[BeamIndex, TypedIndexList[LifeCycleId, BlockPage]],
+                        [[None] * num_life_cycles],
                     ),
                     block,
                 )

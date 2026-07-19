@@ -640,20 +640,34 @@ class BlockRadixTree:
         tokens: Sequence[TokenIdExt],
         matched: list[tuple[Block, int]],
         ssm_lc_id: LifeCycleId,
+        min_num_tokens: int = 0,
     ) -> list[tuple[Block, int]]:
+        """Returns [] unless a candidate covers MORE than min_num_tokens.
+
+        A candidate rooted at ``depth`` covers at most (depth+1) full blocks
+        of tokens, and pruning never grows a match — so any depth whose upper
+        bound cannot beat the running best is skipped without scanning its
+        children. With a warm full-path match the caller's floor prunes every
+        depth except the extension past the exact match, collapsing this scan
+        from one child-scan per matched block to O(1) per request.
+        """
         root = self.next.get(RootBlock.make_key(reuse_scope))
         if not isinstance(root, RootBlock):
             return []
 
         best: list[tuple[Block, int]] = []
-        best_num_tokens = 0
+        best_num_tokens = min_num_tokens
+        tokens_per_block = self._tokens_per_block
         parents: list[RootBlock | Block] = [root]
         parents.extend(block for block, _ in matched)
-        for depth, parent in enumerate(parents):
-            offset = depth * self._tokens_per_block
+        for depth in range(best_num_tokens // tokens_per_block, len(parents)):
+            offset = depth * tokens_per_block
             if offset >= len(tokens):
                 break
-            token_block = list(tokens[offset : offset + self._tokens_per_block])
+            if (depth + 1) * tokens_per_block <= best_num_tokens:
+                continue
+            parent = parents[depth]
+            token_block = list(tokens[offset : offset + tokens_per_block])
             partial_block, match_len = find_best_exact_ssm_match_in_next_nodes(
                 parent, token_block, ssm_lc_id
             )
@@ -683,8 +697,15 @@ class BlockRadixTree:
         matched = self._prune_match(raw_matched)
         ssm_lc_id = self._life_cycles.ssm_life_cycle_id
         if ssm_lc_id is not None:
+            # Floor = the pruned exact match: candidates that cannot exceed it
+            # were discarded by the comparison below anyway; passing the floor
+            # in lets the scan skip those depths without visiting them.
             ssm_partial_matched = self._find_best_exact_ssm_partial_match(
-                reuse_scope, tokens, raw_matched, ssm_lc_id
+                reuse_scope,
+                tokens,
+                raw_matched,
+                ssm_lc_id,
+                min_num_tokens=self._num_matched_tokens(matched),
             )
             if self._num_matched_tokens(ssm_partial_matched) > self._num_matched_tokens(matched):
                 matched = ssm_partial_matched
