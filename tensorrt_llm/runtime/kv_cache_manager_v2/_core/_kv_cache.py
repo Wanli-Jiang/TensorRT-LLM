@@ -70,6 +70,7 @@ from .._stats import KVCacheIterationStatsDelta, KVCacheStatsDelta
 from .._storage._core import Slot
 from .._storage_manager import StorageManager
 from .._utils import (
+    mypyc_attr,
     CachedCudaEvent,
     HalfOpenRange,
     TypedIndexList,
@@ -121,6 +122,7 @@ PARK_SSM_SNAPSHOTS_TO_HOST: Final[bool] = (
 )
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class SeqBlock:
     pages: TypedIndexList[BeamIndex, TypedIndexList[LifeCycleId, BlockPage]]
@@ -209,6 +211,7 @@ class _DeltaScratchSlots(NamedTuple):
     scratch_ranges: TypedIndexList[LifeCycleId, HalfOpenRange[BlockOrdinal]]
 
 
+@mypyc_attr(native_class=False)
 class _KVCache:
     __slots__ = (
         "id",
@@ -310,22 +313,30 @@ class _KVCache:
         self._history_length = 0
         self._commit_state = self.CommitState.ALLOWED
         self._blocks = cast(TypedIndexList, [])
-        self._base_page_indices = make_typed(
-            lambda _: make_typed(lambda _: array.array("i"), self.manager._storage.num_life_cycles),
-            self.beam_width,
+        num_lc_init = int(self.manager._storage.num_life_cycles)
+        self._base_page_indices = cast(
+            TypedIndexList,
+            [
+                cast(TypedIndexList, [array.array("i") for _ in range(num_lc_init)])
+                for _ in range(int(self.beam_width))
+            ],
         )
         self._committed_tokens = []
         self._num_committed_blocks = BlockOrdinal(0)
         self._finish_event = None
         self._tokens_per_block = manager.tokens_per_block
-        self._ssm_blocks = make_typed(
-            lambda _: filled_list(cast(BlockPage, None), manager._storage.num_life_cycles),
-            self.beam_width,
+        self._ssm_blocks = cast(
+            TypedIndexList,
+            [
+                filled_list(cast(BlockPage, None), manager._storage.num_life_cycles)
+                for _ in range(int(self.beam_width))
+            ],
         )
         self._never_resumed = True
         self._enable_swa_scratch_reuse = manager.enable_swa_scratch_reuse
-        self._scratch_slots = make_typed(
-            lambda _: list[ScratchSlotLock](), manager._storage.num_life_cycles
+        self._scratch_slots = cast(
+            TypedIndexList,
+            [list[ScratchSlotLock]() for _ in range(int(manager._storage.num_life_cycles))],
         )
         self._pending_stats = _PendingStats()
         self.__rawref__ = rawref.NULL
@@ -370,8 +381,7 @@ class _KVCache:
     def cuda_stream(self) -> CudaStream:
         return unwrap_optional(self._cuda_stream)
 
-    @cuda_stream.setter
-    def cuda_stream(self, cuda_stream: CudaStream) -> None:
+    def _set_cuda_stream(self, cuda_stream: CudaStream) -> None:
         if self._cuda_stream is not None:
             if self.is_active:
                 CachedCudaEvent(self._cuda_stream).wait_in_stream(cuda_stream)
@@ -572,7 +582,21 @@ class _KVCache:
         manager._living_kv_caches.remove(self.__rawref__)
 
     def __del__(self) -> None:
-        self.close()
+        # Close-on-drop is part of the class contract (tests and callers rely
+        # on it), but a finalizer must NEVER raise: at interpreter teardown
+        # the manager may already be dead, and under the mypyc-compiled
+        # dealloc the unraisable-exception printer would repr() this
+        # half-destroyed object and crash. Swallow everything.
+        try:
+            if self._status != self.Status.CLOSED:
+                self.close()
+        except Exception as e:
+            try:
+                warnings.warn(
+                    "[KVCacheManager] close-on-delete failed "
+                    f"({type(e).__name__}); resources may leak at teardown")
+            except Exception:
+                pass
         self.__rawref__.invalidate()
 
     @property
@@ -581,8 +605,7 @@ class _KVCache:
 
     # beam_width > 1 is only for generation. If decreasing beam_width, uncommitted data in blocks for
     # (beam_index >= beam_width) will be lost.
-    @beam_width.setter
-    def beam_width(self, beam_width: BeamIndex) -> None:
+    def _set_beam_width(self, beam_width: BeamIndex) -> None:
         raise NotImplementedError("Not implemented yet for beam search")
 
     # Get the indices of memory blocks for each beam.
@@ -660,8 +683,7 @@ class _KVCache:
     def enable_swa_scratch_reuse(self) -> bool:
         return self._enable_swa_scratch_reuse
 
-    @enable_swa_scratch_reuse.setter
-    def enable_swa_scratch_reuse(self, enable: bool) -> None:
+    def _set_enable_swa_scratch_reuse(self, enable: bool) -> None:
         if enable == self._enable_swa_scratch_reuse:
             return
         if enable:
@@ -818,14 +840,21 @@ class _KVCache:
                         num_new_blocks_to_add = new_num_blocks - max(stale_end, old_num_blocks)
                     num_new_slots[lc] = num_new_blocks_to_add * beam_width
 
-            net_alloc_counts = make_typed(
-                lambda lc: num_new_slots[lc] + delta_scratch_slots[lc], num_life_cycles
+            net_alloc_counts = cast(
+                TypedIndexList,
+                [
+                    num_new_slots[lc] + delta_scratch_slots[lc]
+                    for lc in typed_range(num_life_cycles)
+                ],
             )
             storage = self._storage
             if any(c > 0 for c in net_alloc_counts):
                 try:
                     new_slots = storage.new_gpu_slots(
-                        make_typed(lambda lc: max(0, net_alloc_counts[lc]), num_life_cycles),
+                        cast(
+                            TypedIndexList,
+                            [max(0, net_alloc_counts[lc]) for lc in typed_range(num_life_cycles)],
+                        ),
                         self._record_migrated_slots,
                         self._record_dropped_pages,
                     )
@@ -834,7 +863,9 @@ class _KVCache:
                     self._lock_held_blocks(backup_holders)
                     return False
             else:
-                new_slots = make_typed(lambda _: list[Slot](), num_life_cycles)
+                new_slots = cast(
+                    TypedIndexList, [list[Slot]() for _ in range(int(num_life_cycles))]
+                )
 
             # Wait on newly allocated slots
             stream_wait_events(
@@ -842,7 +873,7 @@ class _KVCache:
             )
 
             # Combine slots and distribute
-            slots = make_typed(lambda _: list[Slot](), num_life_cycles)
+            slots = cast(TypedIndexList, [list[Slot]() for _ in range(int(num_life_cycles))])
             for lc in typed_range(num_life_cycles):
                 slots[lc] = new_slots[lc] + [
                     lock.detach_slot() for lock in excess_scratch_slots[lc]
@@ -895,8 +926,12 @@ class _KVCache:
                 record_generation_alloc_stats,
             )
             for ordinal in typed_range(old_num_blocks, new_num_blocks):
-                block = make_typed(
-                    lambda _: filled_list(cast(BlockPage, None), num_life_cycles), beam_width
+                block = cast(
+                    TypedIndexList,
+                    [
+                        filled_list(cast(BlockPage, None), num_life_cycles)
+                        for _ in range(int(beam_width))
+                    ],
                 )
                 for beam_index in typed_range(beam_width):
                     for lc in typed_range(num_life_cycles):
@@ -928,8 +963,7 @@ class _KVCache:
         "Get the current capacity in number of tokens."
         return self._capacity
 
-    @capacity.setter
-    def capacity(self, capacity: int) -> None:
+    def _set_capacity(self, capacity: int) -> None:
         """
         Reserve space for next inference. Capacity cannot be smaller than history length.
         Use resize() instead if you need to change both capacity and history length. If you use two
@@ -954,8 +988,7 @@ class _KVCache:
         """
         return self._history_length
 
-    @history_length.setter
-    def history_length(self, history_length: int) -> None:
+    def _set_history_length(self, history_length: int) -> None:
         "History length cannot be decreased. Increase may trigger out-of-window block eviction/dropping for SWA layers."
         success = self.resize(None, history_length)
         assert success
@@ -1013,7 +1046,7 @@ class _KVCache:
             elif new_num_full_blocks <= num_committed_blocks:
                 self._snapshot_last_committed_ssm_block()
         if self.history_length < self.num_committed_tokens:
-            self.history_length = self.num_committed_tokens
+            self._set_history_length(self.num_committed_tokens)
         if finish_virtual_stop and self._commit_state == self.CommitState.VIRTUAL_STOP:
             self._commit_state = self.CommitState.USER_STOP
             self._on_stop_committing()
@@ -1076,7 +1109,7 @@ class _KVCache:
     def resume(self, cuda_stream: CudaStream | None = None) -> bool:
         assert self.status == self.Status.SUSPENDED
         if cuda_stream is not None:
-            self.cuda_stream = cuda_stream
+            self._set_cuda_stream(cuda_stream)
         utilization = max(self._storage.get_utilization(GPU_LEVEL))
         if utilization > self.manager._init_config.max_util_for_resume:
             return False
@@ -1119,7 +1152,9 @@ class _KVCache:
                 return False
 
             # Wait for scratch slots to be ready
-            scratch_slots_to_add = make_typed(lambda _: list[Slot](), num_life_cycles)
+            scratch_slots_to_add = cast(
+                TypedIndexList, [list[Slot]() for _ in range(int(num_life_cycles))]
+            )
             for lc_idx, slot_lst in zip(typed_range(num_life_cycles), tmp_slots, strict=True):
                 if self._never_resumed and (
                     type(life_cycles[lc_idx]) is SsmLifeCycle or has_partial
@@ -1276,8 +1311,12 @@ class _KVCache:
         num_pool_groups = storage.num_pool_groups
         lc2pg = storage.get_pool_group_index
 
-        all_pages = make_typed(
-            lambda _: make_typed(lambda _: list[Page](), num_tiers), num_pool_groups
+        all_pages = cast(
+            TypedIndexList,
+            [
+                cast(TypedIndexList, [list[Page]() for _ in range(int(num_tiers))])
+                for _ in range(int(num_pool_groups))
+            ],
         )
 
         for ordinal, beam_idx, lc_idx in self._active_pages():
@@ -1579,7 +1618,8 @@ class _KVCache:
                     continue  # SSM pages are not rebased
                 if beam_block[lc] is None:
                     continue
-                existing_page = map_optional(tree_block.storage[lc], lambda p: p())
+                existing_page_ref = tree_block.storage[lc]
+                existing_page = existing_page_ref() if existing_page_ref is not None else None
                 locked = isinstance(beam_block[lc], _SharedPageLock)
                 if existing_page is None:
                     # The reusable page is gone. We put our own page into the tree block.
@@ -1719,10 +1759,16 @@ class _KVCache:
             scratch_ranges: The scratch ranges per lifecycle for the new capacity/history_length.
         """
         num_life_cycles = self.manager._life_cycles.size
-        excess = make_typed(lambda _: list[ScratchSlotLock](), num_life_cycles)
+        excess = cast(
+            TypedIndexList, [list[ScratchSlotLock]() for _ in range(int(num_life_cycles))]
+        )
         delta_cnt = filled_list(0, num_life_cycles)
-        scratch_ranges = make_typed(
-            lambda _: HalfOpenRange[BlockOrdinal](BlockOrdinal(0), BlockOrdinal(0)), num_life_cycles
+        scratch_ranges = cast(
+            TypedIndexList,
+            [
+                HalfOpenRange[BlockOrdinal](BlockOrdinal(0), BlockOrdinal(0))
+                for _ in range(int(num_life_cycles))
+            ],
         )
 
         for lc_idx, lc in self.manager._life_cycles.items():
@@ -1804,10 +1850,13 @@ class _KVCache:
         assert self.num_committed_tokens <= self.history_length <= self.capacity
         assert self.num_blocks == div_up(self.capacity, self.tokens_per_block)
 
-        def get_range(lc: LifeCycle):
-            return _KVCache._get_stale_range(self.tokens_per_block, self.history_length, lc)
-
-        stale_ranges = typed_map(self.manager._life_cycles.get(), get_range)
+        stale_ranges = cast(
+            TypedIndexList,
+            [
+                _KVCache._get_stale_range(self.tokens_per_block, self.history_length, lc)
+                for lc in self.manager._life_cycles.get()
+            ],
+        )
         num_life_cycles = self.manager._life_cycles.size
         ssm_lc_id = self.manager._life_cycles.ssm_life_cycle_id
         for ordinal, block in typed_enumerate(self._blocks):
@@ -2075,17 +2124,17 @@ class _KVCache:
         "Shortcut for cases without side effects. Just for better performance."
         tokens_per_block = self.tokens_per_block
 
-        def no_side_effect(lc: LifeCycle) -> bool:
+        for lc in self.manager._life_cycles:
             if type(lc) is SsmLifeCycle:
                 # history_length change does not impact blocks at all.
-                return True
+                continue
             assert type(lc) is AttnLifeCycle
             window = lc.window_size
-            return window is None or lc.get_stale_range(
-                history_length, tokens_per_block
-            ) == lc.get_stale_range(self.history_length, tokens_per_block)
-
-        if all(no_side_effect(lc) for lc in self.manager._life_cycles):
-            self._history_length = history_length
-            return True
-        return False
+            if window is None:
+                continue
+            if lc.get_stale_range(history_length, tokens_per_block) != lc.get_stale_range(
+                self.history_length, tokens_per_block
+            ):
+                return False
+        self._history_length = history_length
+        return True

@@ -15,6 +15,7 @@
 
 from .._common import DEFAULT_BEAM_INDEX, BeamIndex
 from ._kv_cache import _KVCache
+from . import _pyprops  # noqa: F401  (runtime property attachment, not compiled)
 from ._kv_cache_manager import (
     AggregatedPageDesc,
     KVCacheManager,

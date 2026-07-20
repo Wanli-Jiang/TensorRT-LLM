@@ -20,13 +20,26 @@ from typing import TYPE_CHECKING, Iterable, Iterator, NamedTuple, Sequence, Type
 from . import rawref
 from ._common import NDEBUG, BlockOrdinal, PageStatus, TokenId, TokenIdExt
 from ._life_cycle_registry import AttnLifeCycle, LifeCycle, LifeCycleId, LifeCycleRegistry
-from ._utils import TypedIndexList, chunked, div_up, filled_list, find_index, unwrap_rawref
+from ._utils import (
+    TypedIndexList,
+    chunked,
+    div_up,
+    filled_list,
+    find_index,
+    mypyc_attr,
+    unwrap_rawref,
+)
 
 if TYPE_CHECKING:
     from ._event_manager import KVCacheEventManager
     from ._page import CommittedPage
 
 BlockKey = bytes
+
+# Runtime alias for rawref.ref annotations: with native_class=False classes,
+# mypyc erases rawref.ref[...] to its canonical name and resolves it in THIS
+# module's globals when the class body executes.
+ReferenceType = rawref.ReferenceType
 
 
 class ReuseScope(NamedTuple):
@@ -321,6 +334,7 @@ class RootBlock:
         return Hasher(reuse_scope.to_bytes()).digest
 
 
+@mypyc_attr(native_class=False)
 class Block:
     """
     A block of tokens. Manages data for all layers.

@@ -116,40 +116,62 @@ except ImportError:  # mypy_extensions only matters when compiling with mypyc
         return deco
 
 
-# native_class=False: mypyc cannot compile classes inheriting from builtin
-# tuple; keep this one as a regular Python class inside the compiled module.
+# NOT a tuple subclass: mypyc specializes len()/`in`/truthiness on values whose
+# static type derives from tuple, silently bypassing the __len__/__contains__/
+# __bool__ overrides below (observed in production: len() of an EMPTY range
+# read as 2 — the tuple arity — allocating scratch slots that were never
+# supposed to exist). A plain class leaves every operator on the generic
+# protocol, where the overrides are honored. native_class=False keeps CPython
+# semantics for the runtime-evaluated class body.
 @mypyc_attr(native_class=False)
-class HalfOpenRange(tuple[Idx, Idx], Generic[Idx]):
+class HalfOpenRange(Generic[Idx]):
     """A half-open range [beg, end). Falsy when empty (beg >= end).
     Generic over index type. Supports unpacking into (beg, end)."""
 
-    __slots__ = ()
+    __slots__ = ("beg", "end")
 
-    def __new__(cls, beg: Idx, end: Idx) -> "HalfOpenRange[Idx]":
-        return tuple.__new__(cls, (beg, end))
+    def __init__(self, beg: Idx, end: Idx) -> None:
+        self.beg = beg
+        self.end = end
 
-    @property
-    def beg(self) -> Idx:
-        return self[0]
+    def __iter__(self) -> "Iterator[Idx]":
+        yield self.beg
+        yield self.end
 
-    @property
-    def end(self) -> Idx:
-        return self[1]
+    def __getitem__(self, index: int) -> Idx:
+        if index == 0 or index == -2:
+            return self.beg
+        if index == 1 or index == -1:
+            return self.end
+        raise IndexError(index)
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, HalfOpenRange):
+            return self.beg == other.beg and self.end == other.end
+        if isinstance(other, tuple):
+            return len(other) == 2 and self.beg == other[0] and self.end == other[1]
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self.beg, self.end))
+
+    def __repr__(self) -> str:
+        return f"HalfOpenRange({self.beg!r}, {self.end!r})"
 
     def __bool__(self) -> bool:
-        return self[0] < self[1]
+        return self.beg < self.end
 
     def __len__(self) -> int:
-        return max(0, self[1] - self[0])
+        return max(0, self.end - self.beg)
 
     def __contains__(self, item: Any) -> bool:
-        return self[0] <= item < self[1]
+        return self.beg <= item < self.end
 
 
 def intersect(a: HalfOpenRange[Idx], b: HalfOpenRange[Idx]) -> HalfOpenRange[Idx]:
     """Returns the intersection of two half-open ranges [beg, end).
     The result may be empty (beg >= end), which is safe to chain into further intersections."""
-    return HalfOpenRange(max(a[0], b[0]), min(a[1], b[1]))
+    return HalfOpenRange(max(a.beg, b.beg), min(a.end, b.end))
 
 
 def value_or(opt: T | None, default: T) -> T:

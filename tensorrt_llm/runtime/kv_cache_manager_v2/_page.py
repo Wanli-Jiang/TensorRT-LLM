@@ -44,6 +44,7 @@ from ._exceptions import LogicError
 from ._life_cycle_registry import LifeCycleId
 from ._storage._core import Slot
 from ._utils import (
+    mypyc_attr,
     CachedCudaEvent,
     assert_critical,
     filled_list,
@@ -59,6 +60,7 @@ ReferenceType = rawref.ReferenceType
 
 # We will have a huge amount of pages for large storage capacity.
 # So we prefer inheritance over composition to save some memory.
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class Page(Slot):
     _manager: ReferenceType["StorageManager"]
@@ -125,6 +127,7 @@ class Page(Slot):
         raise LogicError("Unexpected call to this implementation.")
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class UncommittedPage(Page):
     # @TODO: consider move this to _PageHolder
@@ -184,23 +187,26 @@ class UncommittedPage(Page):
         return committed_page
 
     def __del__(self) -> None:
-        def check_page(p: "BlockPage") -> bool:
-            return p is None or isinstance(p.page, CommittedPage)
-
+        # No nested function here: mypyc's compiler asserts on nested
+        # functions inside methods of non-native classes.
         if not NDEBUG:
-            assert_critical(
+            ok = (
                 self.life_cycle == self.manager.life_cycles.ssm_life_cycle_id
                 # this may not be true for C++: container size change may happen before or after element destructor.
                 or len(unwrap_rawref(self.kv_cache)._blocks) <= self.ordinal
-                or check_page(
+            )
+            if not ok:
+                p = (
                     unwrap_rawref(self.kv_cache)
                     ._blocks[self.ordinal]
                     .pages[self.beam_index][self.life_cycle]
                 )
-            )
+                ok = p is None or isinstance(p.page, CommittedPage)
+            assert_critical(ok)
         Page.__del__(self)
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class CommittedPage(Page):
     block: rawref.ref["Block"]
@@ -246,6 +252,7 @@ class CommittedPage(Page):
         self.__rawref__.invalidate()
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class _PageHolder:
     "Prevents pages from being dropped."
@@ -298,6 +305,7 @@ class _PageHolder:
         return lock.share(kv_cache, beam_index, ordinal, life_cycle, skip_wait)
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class _UniqPageLock:
     "Locks pages to prevent eviction."
@@ -364,6 +372,7 @@ class LockOwner(NamedTuple):
     life_cycle: LifeCycleId
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True, init=False)
 class _SharedPageLock:
     _uniq_lock: _UniqPageLock | None
@@ -531,6 +540,7 @@ def batched_lock_to_gpu(
     return locks
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class ScratchSlotLock:
     slot: Slot
