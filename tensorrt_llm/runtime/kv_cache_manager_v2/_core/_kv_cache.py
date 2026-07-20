@@ -17,6 +17,7 @@ import array
 import enum
 import math
 import os
+import warnings
 from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -744,18 +745,33 @@ class _KVCache:
         num_life_cycles = manager._life_cycles.size
         if new_num_blocks < old_num_blocks:
             if self.has_scratch_slots:
-                # Forensic detail: which life cycles still hold scratch, and
-                # the resize that tripped it (seen with the mypyc-compiled
-                # module under MTP rewind shrinks; interpreted runs are clean).
                 scratch_counts = [len(s) for s in self._scratch_slots]
-                raise AssertionError(
-                    f"Cannot shrink while scratch slots exist: id={self.id} "
-                    f"scratch_counts={scratch_counts} "
-                    f"capacity={self._capacity}->{capacity} "
-                    f"history_length={history_length} "
-                    f"num_committed={self.num_committed_tokens} "
-                    f"never_resumed={self._never_resumed} "
-                    f"enable_scratch={enable_scratch}")
+                if enable_scratch:
+                    # Scratch reuse is active: shrinking across a block
+                    # boundary with live scratch is a genuine contract
+                    # violation — keep the forensic detail.
+                    raise AssertionError(
+                        f"Cannot shrink while scratch slots exist: id={self.id} "
+                        f"scratch_counts={scratch_counts} "
+                        f"capacity={self._capacity}->{capacity} "
+                        f"history_length={history_length} "
+                        f"num_committed={self.num_committed_tokens} "
+                        f"never_resumed={self._never_resumed} "
+                        f"enable_scratch={enable_scratch}")
+                # Scratch reuse is DISABLED for this cache, so nothing can
+                # reference these slots (get_scratch_desc returns None for
+                # every layer group) — they are leaked resources from a
+                # window before the disable took effect (seen with the
+                # mypyc-compiled module under MTP rewind shrinks). The
+                # growth shortcut above bypasses _take_excess_scratch_slots,
+                # so this shrink is the first drain opportunity: self-heal
+                # instead of asserting, and warn so occurrences stay visible.
+                warnings.warn(
+                    f"Draining {scratch_counts} leaked scratch slots on shrink "
+                    f"for KV cache id={self.id} (scratch reuse disabled; "
+                    f"capacity {self._capacity}->{capacity})")
+                with self._record_event():
+                    self._free_scratch_slots()
             self._subtract_pending_allocation_range(new_num_blocks, old_num_blocks)
             with self._record_event():
                 del self._blocks[new_num_blocks:]

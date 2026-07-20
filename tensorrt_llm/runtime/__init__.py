@@ -32,13 +32,25 @@ def temporary_sys_path(path: str) -> Iterator[None]:
             sys.path.remove(path)
 
 
-# Add current directory to sys.path so kv_cache_manager_v2 can be imported as top-level package.
-# This is required because when kv_cache_manager_v2 is compiled with mypyc, it is compiled as
-# a top-level package (to avoid complex build paths), but at runtime it is used as a submodule.
-# The compiled extension might try to import its submodules using absolute imports based on its
-# compiled name.
-with temporary_sys_path(os.path.dirname(os.path.abspath(__file__))):
-    import kv_cache_manager_v2
+# kv_cache_manager_v2 import, supporting both the interpreted tree and the
+# mypyc-compiled layout. The compiled modules are baked with their fully
+# qualified names (tensorrt_llm.runtime.kv_cache_manager_v2.*) and share one
+# mypyc "group" library that every compiled module imports by its hashed
+# top-level name. That group library lives in THIS directory, which is not on
+# sys.path in editable installs (import-hook based), so load it explicitly
+# while this directory is temporarily on sys.path — later shim imports are
+# then served from the sys.modules cache.
+_here = os.path.dirname(os.path.abspath(__file__))
+with temporary_sys_path(_here):
+    import glob as _glob
+    import importlib as _importlib
+
+    for _lib in sorted(_glob.glob(os.path.join(_here, "*__mypyc.cpython-*.so"))):
+        _importlib.import_module(os.path.basename(_lib).split(".", 1)[0])
+    from . import kv_cache_manager_v2
+
+# Legacy top-level alias (tests/tools import it as a top-level package).
+sys.modules.setdefault("kv_cache_manager_v2", kv_cache_manager_v2)
 
 from .enc_dec_model_runner import EncDecModelRunner
 from .generation import SamplingConfig  # autoflake: skip
