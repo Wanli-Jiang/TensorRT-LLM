@@ -122,8 +122,17 @@ def sequence_to_blockchain_keys(
 ) -> Iterator[tuple[TokenBlock, BlockKey]]:
     digest = Hasher(reuse_scope.to_bytes()).digest
     yield [], digest
+    sha256 = hashlib.sha256
     for token_block in chunked(tokens, tokens_per_block):
-        digest = Hasher(digest).update(token_block).digest
+        # One C call per block: byte-identical to
+        # Hasher(digest).update(token_block).digest (the Hasher wrapper costs
+        # an object plus two update calls per block, and this loop runs once
+        # per block of every admitted request). Multimodal blocks (bytes
+        # items) fall back to the Hasher path.
+        try:
+            digest = sha256(digest + array("Q", token_block).tobytes()).digest()
+        except (TypeError, OverflowError):
+            digest = Hasher(digest).update(token_block).digest
         yield token_block, digest
 
 

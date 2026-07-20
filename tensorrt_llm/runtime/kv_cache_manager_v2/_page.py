@@ -404,6 +404,31 @@ class _SharedPageLock:
         )
         assert old_base_index == BAD_PAGE_INDEX
 
+    @staticmethod
+    def _make_locked(
+        uniq_lock: _UniqPageLock,
+        kv_cache_ref: "rawref.ref",
+        kv_cache: "_KVCache",
+        beam_index: BeamIndex,
+        ordinal: BlockOrdinal,
+        life_cycle: LifeCycleId,
+    ) -> "_SharedPageLock":
+        """Batched-path constructor (see batched_lock_to_gpu).
+
+        Semantically identical to ``_SharedPageLock(uniq_lock, kv_cache, beam_index,
+        ordinal, life_cycle, skip_wait=True)`` except that the owner rawref is
+        shared across the batch instead of created per lock. The caller is
+        responsible for making every page ready in ``kv_cache.cuda_stream``.
+        """
+        self = _SharedPageLock.__new__(_SharedPageLock)
+        self._uniq_lock = uniq_lock
+        self._user = LockOwner(kv_cache_ref, beam_index, ordinal, life_cycle)
+        old_base_index = kv_cache._update_base_page_index(
+            beam_index, ordinal, life_cycle, PageIndex(uniq_lock.page.slot_id)
+        )
+        assert old_base_index == BAD_PAGE_INDEX
+        return self
+
     def __del__(self) -> None:
         if self._uniq_lock is not None:
             self.unlock()
@@ -480,10 +505,30 @@ def batched_lock_to_gpu(
                 storage.schedule_for_eviction(t.page)
         raise
     stream_wait_events(kv_cache.cuda_stream, (p.page.ready_event for p in tasks))
-    return [
-        page.lock(kv_cache, beam_index, ordinal, life_cycle, skip_wait=True)
-        for page, beam_index, ordinal, life_cycle in tasks
-    ]
+    # Inlined page.lock(..., skip_wait=True) chain: the generic path costs five
+    # nested calls plus a fresh owner rawref PER PAGE, and this loop runs once
+    # per block of every admitted request (~hundreds of pages for a warm
+    # long-context request) — it dominates resume time on the admission path.
+    kv_cache_ref = rawref.ref(kv_cache)
+    locks: list[_SharedPageLock] = []
+    for page, beam_index, ordinal, life_cycle in tasks:
+        holder_ref = page._holder
+        holder = unwrap_rawref(holder_ref) if holder_ref is not None else page.hold()
+        uniq_ref = holder._lock
+        if uniq_ref is None:
+            uniq_lock = _UniqPageLock(holder)
+            holder._lock = rawref.ref(uniq_lock)
+        else:
+            uniq_lock = unwrap_rawref(uniq_ref)
+        if page.scheduled_for_eviction:
+            page.manager.exclude_from_eviction(page)
+            assert not page.scheduled_for_eviction
+        locks.append(
+            _SharedPageLock._make_locked(
+                uniq_lock, kv_cache_ref, kv_cache, beam_index, ordinal, life_cycle
+            )
+        )
+    return locks
 
 
 @dataclass(slots=True)
