@@ -211,7 +211,6 @@ class _DeltaScratchSlots(NamedTuple):
     scratch_ranges: TypedIndexList[LifeCycleId, HalfOpenRange[BlockOrdinal]]
 
 
-@mypyc_attr(native_class=False)
 class _KVCache:
     __slots__ = (
         "id",
@@ -381,7 +380,8 @@ class _KVCache:
     def cuda_stream(self) -> CudaStream:
         return unwrap_optional(self._cuda_stream)
 
-    def _set_cuda_stream(self, cuda_stream: CudaStream) -> None:
+    @cuda_stream.setter
+    def cuda_stream(self, cuda_stream: CudaStream) -> None:
         if self._cuda_stream is not None:
             if self.is_active:
                 CachedCudaEvent(self._cuda_stream).wait_in_stream(cuda_stream)
@@ -582,22 +582,23 @@ class _KVCache:
         manager._living_kv_caches.remove(self.__rawref__)
 
     def __del__(self) -> None:
-        # Close-on-drop is part of the class contract (tests and callers rely
-        # on it), but a finalizer must NEVER raise: at interpreter teardown
-        # the manager may already be dead, and under the mypyc-compiled
-        # dealloc the unraisable-exception printer would repr() this
-        # half-destroyed object and crash. Swallow everything.
+        # Leak detector ONLY. Closing is an explicit-protocol obligation of
+        # the owner (the executor wrapper closes on every release path, and
+        # tests must close what they create): running close() from a native
+        # finalizer traverses other objects mid-dealloc-cascade, which the
+        # compiled dealloc does not tolerate (attributes are cleared while
+        # sibling finalizers still run). A finalizer must also never raise.
         try:
             if self._status != self.Status.CLOSED:
-                self.close()
-        except Exception as e:
-            try:
                 warnings.warn(
-                    "[KVCacheManager] close-on-delete failed "
-                    f"({type(e).__name__}); resources may leak at teardown")
-            except Exception:
-                pass
-        self.__rawref__.invalidate()
+                    f"[KVCacheManager] KV cache id={self.id} dropped without "
+                    "close(); its pages leak until manager shutdown")
+        except Exception:
+            pass
+        try:
+            self.__rawref__.invalidate()
+        except Exception:
+            pass
 
     @property
     def beam_width(self) -> BeamIndex:
@@ -605,7 +606,8 @@ class _KVCache:
 
     # beam_width > 1 is only for generation. If decreasing beam_width, uncommitted data in blocks for
     # (beam_index >= beam_width) will be lost.
-    def _set_beam_width(self, beam_width: BeamIndex) -> None:
+    @beam_width.setter
+    def beam_width(self, beam_width: BeamIndex) -> None:
         raise NotImplementedError("Not implemented yet for beam search")
 
     # Get the indices of memory blocks for each beam.
@@ -683,7 +685,8 @@ class _KVCache:
     def enable_swa_scratch_reuse(self) -> bool:
         return self._enable_swa_scratch_reuse
 
-    def _set_enable_swa_scratch_reuse(self, enable: bool) -> None:
+    @enable_swa_scratch_reuse.setter
+    def enable_swa_scratch_reuse(self, enable: bool) -> None:
         if enable == self._enable_swa_scratch_reuse:
             return
         if enable:
@@ -963,7 +966,8 @@ class _KVCache:
         "Get the current capacity in number of tokens."
         return self._capacity
 
-    def _set_capacity(self, capacity: int) -> None:
+    @capacity.setter
+    def capacity(self, capacity: int) -> None:
         """
         Reserve space for next inference. Capacity cannot be smaller than history length.
         Use resize() instead if you need to change both capacity and history length. If you use two
@@ -988,7 +992,8 @@ class _KVCache:
         """
         return self._history_length
 
-    def _set_history_length(self, history_length: int) -> None:
+    @history_length.setter
+    def history_length(self, history_length: int) -> None:
         "History length cannot be decreased. Increase may trigger out-of-window block eviction/dropping for SWA layers."
         success = self.resize(None, history_length)
         assert success
@@ -1046,7 +1051,7 @@ class _KVCache:
             elif new_num_full_blocks <= num_committed_blocks:
                 self._snapshot_last_committed_ssm_block()
         if self.history_length < self.num_committed_tokens:
-            self._set_history_length(self.num_committed_tokens)
+            self.history_length = self.num_committed_tokens
         if finish_virtual_stop and self._commit_state == self.CommitState.VIRTUAL_STOP:
             self._commit_state = self.CommitState.USER_STOP
             self._on_stop_committing()
@@ -1109,7 +1114,7 @@ class _KVCache:
     def resume(self, cuda_stream: CudaStream | None = None) -> bool:
         assert self.status == self.Status.SUSPENDED
         if cuda_stream is not None:
-            self._set_cuda_stream(cuda_stream)
+            self.cuda_stream = cuda_stream
         utilization = max(self._storage.get_utilization(GPU_LEVEL))
         if utilization > self.manager._init_config.max_util_for_resume:
             return False
