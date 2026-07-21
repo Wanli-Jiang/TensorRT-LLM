@@ -1102,10 +1102,12 @@ class _KVCache:
                     if lc_idx != ssm_lc_id
                     else self._ssm_blocks[beam_idx]
                 )
-                holder = expect_type(_SharedPageLock, beam_block[lc_idx]).holder
-                # after this assignment, __del__ of the original _SharedPageLock will use self.finish_event
-                # to indicate end of usage for the page.
+                lock = expect_type(_SharedPageLock, beam_block[lc_idx])
+                holder = lock.holder
                 beam_block[lc_idx] = holder
+                # Explicit release (locks no longer unlock on drop); uses
+                # self.finish_event to indicate end of usage for the page.
+                lock.unlock()
             # Free scratch slots on suspend since the data is ephemeral
             self._free_scratch_slots()
         self._status = self.Status.SUSPENDED
@@ -1628,8 +1630,10 @@ class _KVCache:
                 locked = isinstance(beam_block[lc], _SharedPageLock)
                 if existing_page is None:
                     # The reusable page is gone. We put our own page into the tree block.
-                    page = cast(UncommittedPage, cast(_SharedPageLock, beam_block[lc]).page)
+                    old_lock = cast(_SharedPageLock, beam_block[lc])
+                    page = cast(UncommittedPage, old_lock.page)
                     beam_block[lc] = None
+                    old_lock.unlock()
                     p = page.convert_to_committed(tree_block, self.finish_event)
                     event_manager = self.manager.event_manager
                     if event_manager is not None:
@@ -1640,7 +1644,9 @@ class _KVCache:
                     )
                 else:
                     if locked:
-                        beam_block[lc] = cast(_SharedPageLock, beam_block[lc]).holder
+                        old_lock = cast(_SharedPageLock, beam_block[lc])
+                        beam_block[lc] = old_lock.holder
+                        old_lock.unlock()
                     reuse_list.append((lc, existing_page))
             locks = batched_lock_to_gpu(
                 self,
@@ -1729,9 +1735,11 @@ class _KVCache:
                         if beam_block[lc_idx] is None:
                             assert self.enable_swa_scratch_reuse
                             continue  # Scratch block — no page to unlock
-                        holder = expect_type(_SharedPageLock, beam_block[lc_idx]).holder
+                        lock = expect_type(_SharedPageLock, beam_block[lc_idx])
+                        holder = lock.holder
                         ret.append((ordinal, beam_idx, lc_idx, holder))
                         beam_block[lc_idx] = holder if hold_for_commit else None
+                        lock.unlock()
             # Scratch slot lifetime is handled by resize() after target scratch ranges are recomputed.
         return ret
 
@@ -1846,6 +1854,9 @@ class _KVCache:
             # When using debugpy with breakpoints on exceptions enabled, the lock/holder is not GC'ed even
             # after return from this function. That will likely lead to assertion failures later.
             holders[lc] = None
+            if locked:
+                # Explicit release: dropping the reference no longer unlocks.
+                cast(_SharedPageLock, holder).unlock()
         return ret
 
     def _check_sanity(self) -> bool:
@@ -2075,6 +2086,21 @@ class _KVCache:
             self._scratch_slots[lc].clear()
 
     def _clear_blocks(self) -> None:
+        # Locks are explicit-release: sweep every cell (including SSM) and
+        # unlock live locks before the references are dropped.
+        for block in self._blocks:
+            for beam_block in block.pages:
+                for lc in typed_range(typed_len(beam_block)):
+                    cell = beam_block[lc]
+                    if isinstance(cell, _SharedPageLock):
+                        beam_block[lc] = None
+                        cell.unlock()
+        for beam_block in self._ssm_blocks:
+            for lc in typed_range(typed_len(beam_block)):
+                cell = beam_block[lc]
+                if isinstance(cell, _SharedPageLock):
+                    beam_block[lc] = None
+                    cell.unlock()
         # drop the last block first
         while self._blocks:
             self._blocks.pop()

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple, cast
@@ -305,13 +306,20 @@ class _PageHolder:
         return lock.share(kv_cache, beam_index, ordinal, life_cycle, skip_wait)
 
 
-@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class _UniqPageLock:
-    "Locks pages to prevent eviction."
+    """Locks pages to prevent eviction.
+
+    Lifecycle is EXPLICIT: every _SharedPageLock construction increments
+    _num_shares, every _SharedPageLock.unlock() decrements it, and the last
+    unlock runs _teardown() inline — the same instant the last owning
+    reference used to disappear under the old refcount-driven design. The
+    finalizer only reports leaks.
+    """
 
     holder: _PageHolder | None
     finish_events: list[CachedCudaEvent]
+    _num_shares: int
     __rawref__: rawref.ref["_UniqPageLock"] = field(default_factory=lambda: rawref.NULL)
 
     def __init__(self, holder: _PageHolder) -> None:
@@ -319,6 +327,7 @@ class _UniqPageLock:
             raise ValueError("Lock can be applied only on GPU memory pages.")
         self.holder = holder
         self.finish_events = []
+        self._num_shares = 0
         self.__rawref__ = rawref.NULL
 
     def share(
@@ -337,26 +346,37 @@ class _UniqPageLock:
         assert self.holder is not None
         return self.holder.page
 
-    def __del__(self) -> None:
+    def _release_share(self) -> None:
+        assert self._num_shares > 0
+        self._num_shares -= 1
+        if self._num_shares == 0:
+            self._teardown()
+
+    def _teardown(self) -> None:
         page = self.page
         if not NDEBUG:
             assert_critical(page.cache_level == CacheLevel(0) and not page.scheduled_for_eviction)
         page.ready_event = merge_events(self.finish_events)
+        self.finish_events = []
         assert self.holder is not None
         self.holder._lock = None
-        if False:
-            if page.manager.is_evictable(page):
-                page.manager.schedule_for_eviction(page)
-        else:
-            # Optimized code path:
-            # delete holder first, so if nobody holds the page elsewhere, it becomes droppable immediately,
-            # before we hand it over to eviction controller.
-            self.holder = None
-            # if it's not droppable, then it means self.holder=None had no impact. We need to schedule it
-            # for eviction as usual.
-            if page.status != PageStatus.DROPPABLE and page.manager.is_evictable(page):
-                page.manager.schedule_for_eviction(page)
+        # Delete holder first, so if nobody holds the page elsewhere, it
+        # becomes droppable immediately, before we hand it over to the
+        # eviction controller.
+        self.holder = None
+        # If it's not droppable, then holder=None had no impact and the page
+        # must be scheduled for eviction as usual.
+        if page.status != PageStatus.DROPPABLE and page.manager.is_evictable(page):
+            page.manager.schedule_for_eviction(page)
         self.__rawref__.invalidate()
+
+    def __del__(self) -> None:
+        try:
+            if self.holder is not None:
+                warnings.warn(
+                    "[KVCacheManager] _UniqPageLock dropped with live shares; page leaks")
+        except Exception:
+            pass
 
     def notify_finish(self, event: CachedCudaEvent):
         self.finish_events.append(event)
@@ -372,7 +392,6 @@ class LockOwner(NamedTuple):
     life_cycle: LifeCycleId
 
 
-@mypyc_attr(native_class=False)
 @dataclass(slots=True, init=False)
 class _SharedPageLock:
     _uniq_lock: _UniqPageLock | None
@@ -405,6 +424,7 @@ class _SharedPageLock:
         skip_wait: bool,
     ) -> None:
         self._uniq_lock = uniq_lock
+        uniq_lock._num_shares += 1
         if not skip_wait:
             self.page.ready_event.wait_in_stream(kv_cache.cuda_stream)
         self._user = LockOwner(rawref.ref(kv_cache), beam_index, ordinal, life_cycle)
@@ -431,6 +451,7 @@ class _SharedPageLock:
         """
         self = _SharedPageLock.__new__(_SharedPageLock)
         self._uniq_lock = uniq_lock
+        uniq_lock._num_shares += 1
         self._user = LockOwner(kv_cache_ref, beam_index, ordinal, life_cycle)
         old_base_index = kv_cache._update_base_page_index(
             beam_index, ordinal, life_cycle, PageIndex(uniq_lock.page.slot_id)
@@ -439,13 +460,21 @@ class _SharedPageLock:
         return self
 
     def __del__(self) -> None:
-        if self._uniq_lock is not None:
-            self.unlock()
+        # Leak detector only: unlocking is an explicit obligation of every
+        # site that drops a lock reference (a compiled finalizer must not
+        # traverse the kv_cache/holder/eviction chain mid-dealloc-cascade).
+        try:
+            if self._uniq_lock is not None:
+                warnings.warn(
+                    "[KVCacheManager] _SharedPageLock dropped without unlock(); page leaks")
+        except Exception:
+            pass
 
     def unlock(self) -> Page:
         assert self._uniq_lock is not None
+        uniq_lock = self._uniq_lock
         page = self.page
-        self._uniq_lock.notify_finish(unwrap_rawref(self._user.kv_cache).finish_event)
+        uniq_lock.notify_finish(unwrap_rawref(self._user.kv_cache).finish_event)
         beam_index = self._user.beam_index
         ordinal = self._user.ordinal
         life_cycle = self._user.life_cycle
@@ -458,6 +487,7 @@ class _SharedPageLock:
             self._get_base_page_index() if ordinal != BAD_BLOCK_ORDINAL else BAD_PAGE_INDEX
         )
         self._uniq_lock = None
+        uniq_lock._release_share()
         return page
 
     def _get_base_page_index(self) -> PageIndex:
@@ -520,23 +550,30 @@ def batched_lock_to_gpu(
     # long-context request) — it dominates resume time on the admission path.
     kv_cache_ref = rawref.ref(kv_cache)
     locks: list[_SharedPageLock] = []
-    for page, beam_index, ordinal, life_cycle in tasks:
-        holder_ref = page._holder
-        holder = unwrap_rawref(holder_ref) if holder_ref is not None else page.hold()
-        uniq_ref = holder._lock
-        if uniq_ref is None:
-            uniq_lock = _UniqPageLock(holder)
-            holder._lock = rawref.ref(uniq_lock)
-        else:
-            uniq_lock = unwrap_rawref(uniq_ref)
-        if page.scheduled_for_eviction:
-            page.manager.exclude_from_eviction(page)
-            assert not page.scheduled_for_eviction
-        locks.append(
-            _SharedPageLock._make_locked(
-                uniq_lock, kv_cache_ref, kv_cache, beam_index, ordinal, life_cycle
+    try:
+        for page, beam_index, ordinal, life_cycle in tasks:
+            holder_ref = page._holder
+            holder = unwrap_rawref(holder_ref) if holder_ref is not None else page.hold()
+            uniq_ref = holder._lock
+            if uniq_ref is None:
+                uniq_lock = _UniqPageLock(holder)
+                holder._lock = rawref.ref(uniq_lock)
+            else:
+                uniq_lock = unwrap_rawref(uniq_ref)
+            if page.scheduled_for_eviction:
+                page.manager.exclude_from_eviction(page)
+                assert not page.scheduled_for_eviction
+            locks.append(
+                _SharedPageLock._make_locked(
+                    uniq_lock, kv_cache_ref, kv_cache, beam_index, ordinal, life_cycle
+                )
             )
-        )
+    except Exception:
+        # Locks are explicit-release now: undo the ones already built so a
+        # failed batch does not leak locked pages.
+        for built in locks:
+            built.unlock()
+        raise
     return locks
 
 
