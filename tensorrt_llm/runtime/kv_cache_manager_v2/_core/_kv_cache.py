@@ -799,6 +799,18 @@ class _KVCache:
                     self._free_scratch_slots()
             self._subtract_pending_allocation_range(new_num_blocks, old_num_blocks)
             with self._record_event():
+                # Locks are explicit-release: unlock live lock cells in the
+                # blocks being deleted (rewind shrinks drop blocks whose
+                # uncommitted pages are still locked) before the references
+                # go away, so their base page indices are cleared prior to
+                # the truncation asserts below.
+                for dropped_ordinal in typed_range(new_num_blocks, old_num_blocks):
+                    for beam_block in self._blocks[dropped_ordinal].pages:
+                        for lc in typed_range(typed_len(beam_block)):
+                            cell = beam_block[lc]
+                            if isinstance(cell, _SharedPageLock):
+                                beam_block[lc] = None
+                                cell.unlock()
                 del self._blocks[new_num_blocks:]
             for beam_indices in self._base_page_indices:
                 for indices in beam_indices:

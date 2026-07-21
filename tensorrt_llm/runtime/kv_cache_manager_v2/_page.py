@@ -422,42 +422,21 @@ class _SharedPageLock:
         ordinal: BlockOrdinal,
         life_cycle: LifeCycleId,
         skip_wait: bool,
+        kv_cache_ref: "rawref.ref | None" = None,
     ) -> None:
+        # kv_cache_ref: batched callers pass one shared owner rawref for the
+        # whole batch instead of creating one per lock.
         self._uniq_lock = uniq_lock
         uniq_lock._num_shares += 1
         if not skip_wait:
             self.page.ready_event.wait_in_stream(kv_cache.cuda_stream)
-        self._user = LockOwner(rawref.ref(kv_cache), beam_index, ordinal, life_cycle)
+        if kv_cache_ref is None:
+            kv_cache_ref = rawref.ref(kv_cache)
+        self._user = LockOwner(kv_cache_ref, beam_index, ordinal, life_cycle)
         old_base_index = kv_cache._update_base_page_index(
             beam_index, ordinal, life_cycle, PageIndex(self.page.slot_id)
         )
         assert old_base_index == BAD_PAGE_INDEX
-
-    @staticmethod
-    def _make_locked(
-        uniq_lock: _UniqPageLock,
-        kv_cache_ref: "rawref.ref",
-        kv_cache: "_KVCache",
-        beam_index: BeamIndex,
-        ordinal: BlockOrdinal,
-        life_cycle: LifeCycleId,
-    ) -> "_SharedPageLock":
-        """Batched-path constructor (see batched_lock_to_gpu).
-
-        Semantically identical to ``_SharedPageLock(uniq_lock, kv_cache, beam_index,
-        ordinal, life_cycle, skip_wait=True)`` except that the owner rawref is
-        shared across the batch instead of created per lock. The caller is
-        responsible for making every page ready in ``kv_cache.cuda_stream``.
-        """
-        self = _SharedPageLock.__new__(_SharedPageLock)
-        self._uniq_lock = uniq_lock
-        uniq_lock._num_shares += 1
-        self._user = LockOwner(kv_cache_ref, beam_index, ordinal, life_cycle)
-        old_base_index = kv_cache._update_base_page_index(
-            beam_index, ordinal, life_cycle, PageIndex(uniq_lock.page.slot_id)
-        )
-        assert old_base_index == BAD_PAGE_INDEX
-        return self
 
     def __del__(self) -> None:
         # Leak detector only: unlocking is an explicit obligation of every
@@ -564,8 +543,8 @@ def batched_lock_to_gpu(
                 page.manager.exclude_from_eviction(page)
                 assert not page.scheduled_for_eviction
             locks.append(
-                _SharedPageLock._make_locked(
-                    uniq_lock, kv_cache_ref, kv_cache, beam_index, ordinal, life_cycle
+                _SharedPageLock(
+                    uniq_lock, kv_cache, beam_index, ordinal, life_cycle, True, kv_cache_ref
                 )
             )
     except Exception:
