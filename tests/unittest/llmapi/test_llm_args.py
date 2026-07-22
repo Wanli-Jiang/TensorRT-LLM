@@ -18,6 +18,7 @@ from utils.llm_data import llm_models_root
 from utils.util import force_ampere
 
 import tensorrt_llm.bindings.executor as tle
+import tensorrt_llm.llmapi as public_llmapi
 import tensorrt_llm.llmapi.llm_args as llm_args_mod
 from tensorrt_llm import LLM as TorchLLM
 from tensorrt_llm._torch.auto_deploy.llm_args import \
@@ -42,7 +43,8 @@ from tensorrt_llm.llmapi.llm_args import (BaseLlmArgs, CacheTransceiverConfig,
                                           ExecutorMemoryType,
                                           ExtendedRuntimePerfKnobConfig,
                                           KvCacheConfig,
-                                          LookaheadDecodingConfig, MoeConfig,
+                                          LookaheadDecodingConfig,
+                                          MambaStateConfig, MoeConfig,
                                           MTPDecodingConfig, MultimodalConfig,
                                           MultimodalEncoderCudaGraphConfig,
                                           PeftCacheConfig, PybindMirror,
@@ -179,6 +181,22 @@ kv_cache_config:
         assert llm_args.kv_cache_config.max_attention_window == [
             1024, 1024, 1024
         ]
+
+    def test_from_yaml_migrates_legacy_mamba_interval(self, tmp_path):
+        yaml_path = tmp_path / "legacy_mamba_interval.yaml"
+        yaml_path.write_text(
+            yaml.safe_dump({
+                "model": str(llama_model_path),
+                "kv_cache_config": {
+                    "mamba_state_cache_interval": 64,
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        llm_args = TorchLlmArgs.from_yaml(yaml_path)
+
+        assert llm_args.kv_cache_config.mamba_state_config.periodic_snapshot_interval == 64
 
     def test_llm_args_with_pydantic_options(self):
         yaml_content = """
@@ -611,6 +629,11 @@ def test_KvCacheConfig_declaration():
                            enable_swa_scratch_reuse=True,
                            enable_partial_reuse=True,
                            copy_on_partial_reuse=True,
+                           mamba_state_config=MambaStateConfig(
+                               periodic_snapshot_interval=0,
+                               additional_snapshot_offsets_from_start=[128],
+                               additional_snapshot_offsets_from_end=[0, 32],
+                           ),
                            pool_ratio=[0.25, 0.75],
                            avg_seq_len=2048,
                            block_reuse_policy="per_request",
@@ -633,6 +656,13 @@ def test_KvCacheConfig_declaration():
     assert config.pool_ratio == [0.25, 0.75]
     assert config.avg_seq_len == 2048
     assert config.block_reuse_policy == "per_request"
+    assert config.mamba_state_config.periodic_snapshot_interval == 0
+    assert config.mamba_state_config.additional_snapshot_offsets_from_start == [
+        128
+    ]
+    assert config.mamba_state_config.additional_snapshot_offsets_from_end == [
+        0, 32
+    ]
     assert not hasattr(pybind_config, "pool_ratio")
     assert not hasattr(pybind_config, "avg_seq_len")
     assert not hasattr(pybind_config, "block_reuse_policy")
@@ -652,6 +682,126 @@ def test_KvCacheConfig_declaration():
             block_reuse_policy == "per_conversation")
     with pytest.raises(ValidationError):
         KvCacheConfig(block_reuse_policy="invalid")
+
+
+def test_MambaStateConfig_defaults_use_independent_lists():
+    first = MambaStateConfig()
+    second = MambaStateConfig()
+
+    assert first.periodic_snapshot_interval == 0
+    first.additional_snapshot_offsets_from_start.append(128)
+    first.additional_snapshot_offsets_from_end.append(0)
+
+    assert second.additional_snapshot_offsets_from_start == []
+    assert second.additional_snapshot_offsets_from_end == []
+    assert public_llmapi.MambaStateConfig is MambaStateConfig
+
+
+def test_MambaStateConfig_rejects_unknown_fields():
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        MambaStateConfig(unknown_snapshot_policy=1)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("periodic_snapshot_interval", -1),
+        ("additional_snapshot_offsets_from_start", [0]),
+        ("additional_snapshot_offsets_from_start", [-1]),
+        ("additional_snapshot_offsets_from_start", [True]),
+        ("additional_snapshot_offsets_from_start", [1.5]),
+        ("additional_snapshot_offsets_from_start", ["128"]),
+        ("additional_snapshot_offsets_from_end", [-1]),
+        ("additional_snapshot_offsets_from_end", [True]),
+        ("additional_snapshot_offsets_from_end", [1.5]),
+        ("additional_snapshot_offsets_from_end", ["32"]),
+    ],
+)
+def test_MambaStateConfig_rejects_invalid_snapshot_offsets(field, value):
+    with pytest.raises(ValidationError, match=field):
+        MambaStateConfig(**{field: value})
+
+
+@pytest.mark.parametrize(
+    ("field", "offsets"),
+    [
+        ("additional_snapshot_offsets_from_start", [128]),
+        ("additional_snapshot_offsets_from_end", [0]),
+    ],
+)
+def test_KvCacheConfig_requires_v2_for_additional_snapshot_offsets(
+        field, offsets):
+    state_config = MambaStateConfig(**{field: offsets})
+
+    with pytest.raises(ValidationError, match="use_kv_cache_manager_v2=True"):
+        KvCacheConfig(
+            mamba_state_config=state_config,
+            use_kv_cache_manager_v2=False,
+        )
+
+    for use_v2 in (True, "auto"):
+        config = KvCacheConfig(
+            mamba_state_config=state_config,
+            use_kv_cache_manager_v2=use_v2,
+        )
+        assert getattr(config.mamba_state_config, field) == offsets
+
+
+def test_KvCacheConfig_allows_periodic_snapshots_with_v1():
+    config = KvCacheConfig(
+        mamba_state_config=MambaStateConfig(periodic_snapshot_interval=64),
+        use_kv_cache_manager_v2=False,
+    )
+
+    assert config.mamba_state_config.periodic_snapshot_interval == 64
+
+
+def test_KvCacheConfig_rejects_removed_mamba_interval_field():
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        KvCacheConfig(mamba_state_cache_interval=64)
+
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        TorchLlmArgs(
+            model=llama_model_path,
+            kv_cache_config={"mamba_state_cache_interval": 64},
+        )
+
+
+def test_config_file_merge_migrates_legacy_mamba_interval_without_mutating_input(
+):
+    yaml_dict = {
+        "kv_cache_config": {
+            "mamba_state_cache_interval": 64,
+            "mamba_state_config": {
+                "additional_snapshot_offsets_from_end": [0],
+            },
+        },
+    }
+
+    merged = update_llm_args_with_extra_dict({"model": "dummy"}, yaml_dict)
+
+    assert merged[
+        "kv_cache_config"].mamba_state_config.periodic_snapshot_interval == 64
+    assert merged[
+        "kv_cache_config"].mamba_state_config.additional_snapshot_offsets_from_end == [
+            0
+        ]
+    assert yaml_dict["kv_cache_config"]["mamba_state_cache_interval"] == 64
+
+
+def test_config_file_merge_rejects_legacy_and_new_mamba_intervals():
+    with pytest.raises(ValueError, match="cannot set both"):
+        update_llm_args_with_extra_dict(
+            {"model": "dummy"},
+            {
+                "kv_cache_config": {
+                    "mamba_state_cache_interval": 64,
+                    "mamba_state_config": {
+                        "periodic_snapshot_interval": 64,
+                    },
+                },
+            },
+        )
 
 
 def test_KvCacheConfig_disk_cache_validation(tmp_path):

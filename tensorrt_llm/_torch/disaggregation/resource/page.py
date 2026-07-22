@@ -1,3 +1,17 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -48,12 +62,30 @@ class PhysicalPool:
     base_address: int  # uint64
     slot_bytes: int
     num_slots: int
+    # Distance between adjacent slots in this logical pool view. Mamba also
+    # consumes ``layer_stride_bytes`` to address its per-layer state. The
+    # defaults preserve V1 Mamba's dense ``[layer][slot][payload]`` layout;
+    # V2 Mamba overrides both strides for its slot-major coalesced layout.
+    slot_stride_bytes: Optional[int] = None
+    layer_stride_bytes: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.slot_stride_bytes is None:
+            self.slot_stride_bytes = self.slot_bytes
+        if self.layer_stride_bytes is None:
+            self.layer_stride_bytes = self.num_slots * self.slot_stride_bytes
+        if self.slot_stride_bytes < self.slot_bytes:
+            raise ValueError("slot_stride_bytes must be greater than or equal to slot_bytes")
+        if self.layer_stride_bytes < self.slot_bytes:
+            raise ValueError("layer_stride_bytes must be greater than or equal to slot_bytes")
 
     def to_dict(self) -> dict:
         return {
             "base_address": int(self.base_address),
             "slot_bytes": int(self.slot_bytes),
             "num_slots": int(self.num_slots),
+            "slot_stride_bytes": int(self.slot_stride_bytes),
+            "layer_stride_bytes": int(self.layer_stride_bytes),
         }
 
     @staticmethod
@@ -62,6 +94,16 @@ class PhysicalPool:
             base_address=int(data["base_address"]),
             slot_bytes=int(data["slot_bytes"]),
             num_slots=int(data["num_slots"]),
+            slot_stride_bytes=(
+                int(data["slot_stride_bytes"])
+                if data.get("slot_stride_bytes") is not None
+                else None
+            ),
+            layer_stride_bytes=(
+                int(data["layer_stride_bytes"])
+                if data.get("layer_stride_bytes") is not None
+                else None
+            ),
         )
 
 
