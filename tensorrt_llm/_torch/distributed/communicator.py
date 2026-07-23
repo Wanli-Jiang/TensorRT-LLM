@@ -170,6 +170,14 @@ class Distributed(ABC):
     def broadcast(self, obj, root=0):
         pass
 
+    def broadcast_int64(self, value, root=0):
+        """Broadcast a single Python int (must fit in int64) from *root*.
+
+        Subclasses may override with a single fixed-size buffer collective;
+        the default falls back to the generic object broadcast.
+        """
+        return self.broadcast(value, root=root)
+
     @abstractmethod
     def allgather(self, obj, root=0):
         pass
@@ -205,6 +213,19 @@ class Distributed(ABC):
     @abstractmethod
     def tp_allgather(self, obj):
         pass
+
+    def tp_allgather_int64(self, values):
+        """Allgather a small, fixed-size list of Python ints across TP ranks.
+
+        Every rank MUST pass a list of the same length (the protocol is
+        buffer-based on the MPI path, with no length exchange). Values must
+        fit in int64. Returns a list with tp_size entries, one list of ints
+        per rank.
+
+        Subclasses may override with a single buffer-based collective; the
+        default falls back to the generic object allgather.
+        """
+        return self.tp_allgather(list(values))
 
     @abstractmethod
     def cp_allgather(self, obj):
@@ -665,6 +686,22 @@ class MPIDist(Distributed):
         comm = mpi_comm()
         return safe_broadcast(comm, obj, root=root, chunk_size=chunk_size)
 
+    def broadcast_int64(self, value, root=0):
+        """Single fixed-size MPI_Bcast for one int64 value.
+
+        Avoids the two-collective header+payload protocol (and pickle)
+        that the generic object path (safe_broadcast) performs on every
+        call. Used on the per-iteration request-count probe.
+        """
+        if not ENABLE_MULTI_DEVICE:
+            return value
+        if MPI is None:
+            raise RuntimeError(
+                "mpi4py is required when ENABLE_MULTI_DEVICE is True")
+        buf = np.array([value if value is not None else 0], dtype=np.int64)
+        mpi_comm().Bcast([buf, MPI.INT64_T], root=root)
+        return int(buf[0])
+
     def allgather(self, obj):
         return mpi_allgather(obj)
 
@@ -736,6 +773,26 @@ class MPIDist(Distributed):
     def tp_allgather(self, obj, chunk_size: int = 4 * 1024 * 1024):
         comm = self.tp_comm
         return safe_allgather(comm, obj, chunk_size=chunk_size)
+
+    def tp_allgather_int64(self, values):
+        """Single buffer-based MPI_Allgather for fixed-size int lists.
+
+        Avoids the pickle round-trip and the extra length-exchange
+        collective that the generic object path (safe_allgather) performs
+        on every call. Every rank must pass the same number of values;
+        see the base-class docstring.
+        """
+        if not ENABLE_MULTI_DEVICE:
+            return [list(values)]
+        if MPI is None:
+            raise RuntimeError(
+                "mpi4py is required when ENABLE_MULTI_DEVICE is True")
+        comm = self.tp_comm
+        size = comm.Get_size()
+        sendbuf = np.asarray(list(values), dtype=np.int64)
+        recvbuf = np.empty((size, sendbuf.shape[0]), dtype=np.int64)
+        comm.Allgather([sendbuf, MPI.INT64_T], [recvbuf, MPI.INT64_T])
+        return recvbuf.tolist()
 
     def tp_gather(self, obj, root=0, chunk_size: int = 4 * 1024 * 1024):
         comm = self.tp_comm

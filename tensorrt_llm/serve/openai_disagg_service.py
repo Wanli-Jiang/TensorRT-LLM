@@ -14,7 +14,7 @@
 
 import asyncio
 import os
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 from tensorrt_llm.llmapi.disagg_utils import ConditionalDisaggConfig, DisaggServerConfig, ServerRole
 from tensorrt_llm.logger import logger
@@ -70,6 +70,27 @@ class OpenAIDisaggregatedService(OpenAIService):
         self._gen_client = None
         self._schedule_style = DisaggScheduleStyle.CONTEXT_FIRST
 
+        # Orchestrator-level flow control (both knobs default off).
+        # MAX_INFLIGHT_TOTAL gates BEFORE ctx dispatch: a waiting turn holds no
+        # ctx KV, no SSM slot and no transfer buffer, so deep client
+        # concurrency queues harmlessly here instead of wedging the workers.
+        # MAX_INFLIGHT_PER_GEN caps concurrent decodes per gen server just
+        # inside the decode-throughput peak (past the peak the aggregate
+        # output-vs-depth curve slopes down and the closed loop self-reinforces
+        # into a deep-slow equilibrium).
+        self._max_inflight_total = int(
+            os.getenv("TRTLLM_DISAGG_MAX_INFLIGHT_TOTAL", "0"))
+        self._max_inflight_per_gen = int(
+            os.getenv("TRTLLM_DISAGG_MAX_INFLIGHT_PER_GEN", "0"))
+        self._total_gate = (asyncio.Semaphore(self._max_inflight_total)
+                            if self._max_inflight_total > 0 else None)
+        self._gen_gates: Dict[str, asyncio.Semaphore] = {}
+        if self._max_inflight_total > 0 or self._max_inflight_per_gen > 0:
+            logger.info(
+                f"Disagg flow control: max_inflight_total="
+                f"{self._max_inflight_total or 'off'} max_inflight_per_gen="
+                f"{self._max_inflight_per_gen or 'off'}")
+
         match self._config.schedule_style:
             case "generation_first":
                 self._send_disagg_request = self._send_disagg_request_gen_first
@@ -113,7 +134,47 @@ class OpenAIDisaggregatedService(OpenAIService):
             raise RuntimeError("Cluster is not ready")
         return await self._send_disagg_request(request, hooks)
 
+    @staticmethod
+    def _once_release(sem: asyncio.Semaphore) -> Callable[[], None]:
+        """Single-shot release closure (idempotent under double-close paths)."""
+        released = False
+
+        def release() -> None:
+            nonlocal released
+            if not released:
+                released = True
+                sem.release()
+
+        return release
+
+    @staticmethod
+    async def _release_on_close(gen, release: Callable[[], None]):
+        """Re-chain a response stream so the gate opens when the stream ends,
+        errors, or the client disconnects (GeneratorExit)."""
+        try:
+            async for chunk in gen:
+                yield chunk
+        finally:
+            release()
+
     async def _send_disagg_request_ctx_first(
+        self, request: UCompletionRequest, hooks: Optional[ResponseHooks] = None
+    ) -> UCompletionResponseOrGenerator:
+        if self._total_gate is None:
+            return await self._send_disagg_request_ctx_first_impl(request, hooks)
+        await self._total_gate.acquire()
+        release = self._once_release(self._total_gate)
+        try:
+            response = await self._send_disagg_request_ctx_first_impl(request, hooks)
+        except BaseException:
+            release()
+            raise
+        if hasattr(response, "__anext__"):
+            return self._release_on_close(response, release)
+        release()
+        return response
+
+    async def _send_disagg_request_ctx_first_impl(
         self, request: UCompletionRequest, hooks: Optional[ResponseHooks] = None
     ) -> UCompletionResponseOrGenerator:
         # ctx_response contains a http response with ContextPhaseParams attached after prefill compute is done
@@ -173,9 +234,25 @@ class OpenAIDisaggregatedService(OpenAIService):
                     gen_req, exclude_server=ctx_server, req_id=disagg_request_id
                 )
                 gen_reservation_id = disagg_request_id
-            gen_response = await self._gen_client.send_request(
-                gen_req, server=gen_server, hooks=hooks, req_id=gen_reservation_id
-            )
+            gate_release: Optional[Callable[[], None]] = None
+            if self._max_inflight_per_gen > 0:
+                gate = self._gen_gates.setdefault(
+                    gen_server, asyncio.Semaphore(self._max_inflight_per_gen))
+                await gate.acquire()
+                gate_release = self._once_release(gate)
+            try:
+                gen_response = await self._gen_client.send_request(
+                    gen_req, server=gen_server, hooks=hooks, req_id=gen_reservation_id
+                )
+            except BaseException:
+                if gate_release is not None:
+                    gate_release()
+                raise
+            if gate_release is not None:
+                if hasattr(gen_response, "__anext__"):
+                    gen_response = self._release_on_close(gen_response, gate_release)
+                else:
+                    gate_release()
             return gen_response
         else:
             if gen_server:

@@ -257,7 +257,10 @@ class ADPRouter(ABC):
         """
         local_state = self.create_rank_state(active_requests, new_requests or [])
         local_state.copy_iter_stats_from(iter_stats_payload)
-        responses = self.dist.tp_allgather(local_state.serialize())
+        # serialize() emits a fixed number of ints on every rank, so the
+        # single-collective int64 allgather applies (the generic object
+        # path costs an extra length-exchange collective plus pickle).
+        responses = self.dist.tp_allgather_int64(local_state.serialize())
         return [RankState.deserialize(data=resp) for resp in responses]
 
     @staticmethod

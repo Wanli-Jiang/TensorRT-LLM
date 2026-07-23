@@ -80,7 +80,8 @@ from .cuda_graph_runner import (ENC_DEC_CUDA_GRAPH_DUMMY_TOKEN_NUM,
 from .guided_decoder import CapturableGuidedDecoder
 from .kv_cache_manager_v2 import KVCacheManagerV2
 from .layerwise_nvtx_marker import LayerwiseNvtxMarker
-from .llm_request import (LlmRequest, LlmRequestState, get_draft_token_length,
+from .llm_request import (LlmRequest, LlmRequestState, get_cached_beam0_tokens,
+                          get_draft_token_length,
                           get_multimodal_embedding_lengths)
 from .mamba_cache_manager import MambaHybridCacheManager
 from .model_loader import ModelLoader, _construct_checkpoint_loader
@@ -3932,7 +3933,9 @@ class PyTorchModelEngine(ModelEngine):
 
         for request in scheduled_requests.context_requests:
             request_ids.append(request.py_request_id)
-            all_prompt_tokens = request.get_tokens(0)
+            # Cached across chunked-prefill iterations: get_tokens(0) copies
+            # the full prompt (up to ~100K tokens) on every chunk otherwise.
+            all_prompt_tokens = get_cached_beam0_tokens(request)
             draft_lens.append(0)
             begin_compute = request.context_current_position
             end_compute = begin_compute + request.context_chunk_size

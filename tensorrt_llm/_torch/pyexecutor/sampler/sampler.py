@@ -2506,14 +2506,22 @@ class TorchSampler(Sampler[SampleStateTorch], AsyncWorkerMixin):
             if max_stop_word_length == 1:
                 return new_token in stop_words_list
 
-            # Slow path: at least one multi-token stop word exists
-            tokens = request.get_tokens(beam_idx)
+            # Slow path: at least one multi-token stop word exists.
+            # Only the trailing max_stop_word_length tokens can matter, so
+            # fetch just that window instead of materializing the full
+            # sequence (prompt + generated tokens) via get_tokens on every
+            # newly decoded token.
+            num_tokens = request.get_num_tokens(beam_idx)
+            window = min(max_stop_word_length, num_tokens)
+            tokens = [
+                request.get_token(beam_idx, num_tokens - window + i) for i in range(window)
+            ]
             offset = 0
             for i, offset_end in enumerate(prefix_sum):
                 if i > 0:
                     offset = prefix_sum[i - 1]
                 stop_word = stop_words_list[offset:offset_end]
-                if len(stop_word) > len(tokens):
+                if len(stop_word) > num_tokens:
                     continue
                 if tokens[-len(stop_word) :] == stop_word:
                     return True

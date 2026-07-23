@@ -1121,7 +1121,13 @@ class PyExecutor:
         """
         responses = self._pending_transfer_responses
         self._pending_transfer_responses = []
-        if responses or self.enable_attention_dp:
+        # Transfer-completion responses are only produced in disaggregated
+        # mode (see _end_transfer_and_maybe_terminate, gated on
+        # kv_cache_transceiver). Without a transceiver the buffer is empty on
+        # every rank, so all ranks symmetrically skip the collective instead
+        # of paying an empty tp_gather on every iteration.
+        if responses or (self.enable_attention_dp
+                         and self.kv_cache_transceiver is not None):
             # Even when this rank has no responses we must participate in the
             # collective when ADP is enabled so that the other rank's gather
             # can complete.
@@ -1135,6 +1141,12 @@ class PyExecutor:
         Non-ADP runs handle timeouts inline; the buffer is empty here.
         """
         if not (self.enable_attention_dp and self.dist.world_size != 1):
+            return
+        # KV-transfer timeouts are only produced in disaggregated mode
+        # (_handle_responses gates the buffer on kv_cache_transceiver).
+        # Without a transceiver the buffer is empty on every rank, so all
+        # ranks symmetrically skip the per-iteration consensus allgather.
+        if self.kv_cache_transceiver is None:
             return
         timed_out = self._pending_timed_out_requests
         self._pending_timed_out_requests = []
@@ -5117,12 +5129,16 @@ class PyExecutor:
         balanced_context_requests = context_requests
         num_scheduled_context_requests = len(context_requests)
         num_scheduled_generation_requests = len(generation_requests)
+        # get_num_tokens is O(1); len(get_tokens(0)) would materialize the
+        # full token list (prompt can be >100K tokens) on every iteration
+        # that carries context work.
         num_scheduled_tokens = sum(
-            [len(req.get_tokens(0))
-             for req in context_requests]) + num_scheduled_generation_requests
+            req.get_num_tokens(0)
+            for req in context_requests) + num_scheduled_generation_requests
         # Note: We use tp_allgather instead of tp_cp_allgather because we want to
         # balance the requests across DP ranks; not CP ranks within those DP ranks.
-        responses_list = self.dist.tp_allgather([
+        # Fixed 3-int payload on every rank -> single-collective int64 path.
+        responses_list = self.dist.tp_allgather_int64([
             num_scheduled_context_requests, num_scheduled_generation_requests,
             num_scheduled_tokens
         ])
