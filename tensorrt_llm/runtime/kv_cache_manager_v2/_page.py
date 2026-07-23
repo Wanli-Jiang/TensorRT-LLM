@@ -128,6 +128,12 @@ class Page(Slot):
         raise LogicError("Unexpected call to this implementation.")
 
 
+def _uncommitted_del_check_page(p: "BlockPage") -> bool:
+    # Module-level (not nested in __del__): mypyc cannot compile nested
+    # functions inside methods of native_class=False classes.
+    return p is None or isinstance(p.page, CommittedPage)
+
+
 @mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class UncommittedPage(Page):
@@ -213,15 +219,12 @@ class UncommittedPage(Page):
         return committed_page
 
     def __del__(self) -> None:
-        def check_page(p: "BlockPage") -> bool:
-            return p is None or isinstance(p.page, CommittedPage)
-
         if not NDEBUG:
             assert_critical(
                 self.life_cycle == self.manager.life_cycles.ssm_life_cycle_id
                 # this may not be true for C++: container size change may happen before or after element destructor.
                 or len(unwrap_rawref(self.kv_cache)._blocks) <= self.ordinal
-                or check_page(
+                or _uncommitted_del_check_page(
                     unwrap_rawref(self.kv_cache)
                     ._blocks[self.ordinal]
                     .pages[self.beam_index][self.life_cycle]
