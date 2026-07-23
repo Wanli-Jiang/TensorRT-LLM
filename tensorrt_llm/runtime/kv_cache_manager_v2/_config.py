@@ -242,6 +242,20 @@ class KVCacheManagerConfig:
     Required when SSM layers are present.
     """
 
+    prune_stale_ssm_snapshots: bool = False
+    """
+    Save-last-snapshot mode: committing a new SSM snapshot drops the sequence's
+    previous parked snapshot. Only safe when every snapshot is an end-of-turn
+    boundary (no periodic / from-start snapshots). Set by the policy layer.
+    """
+
+    park_ssm_snapshots_to_host: bool = False
+    """
+    Save-last-snapshot mode: place SSM snapshots on the first non-GPU tier first,
+    GPU as fallback, so parked conversations hold no GPU SSM slot between turns.
+    Set by the policy layer.
+    """
+
     enable_stats: bool = True
     """
     Collect V2 KV cache allocation, reuse, and transfer statistics.

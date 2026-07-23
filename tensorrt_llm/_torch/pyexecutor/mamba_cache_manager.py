@@ -17,8 +17,8 @@ import math
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import (TYPE_CHECKING, Dict, Iterable, List, Literal, NamedTuple,
-                    Optional, Tuple, Union)
+from typing import (TYPE_CHECKING, Dict, Final, Iterable, List, Literal,
+                    NamedTuple, Optional, Tuple, Union)
 
 import torch
 import triton
@@ -56,6 +56,27 @@ from tensorrt_llm.runtime.kv_cache_manager_v2 import (LayerId, PageIndexMode,
                                                       SwaScratchReuseConfig)
 
 GB = 1 << 30
+
+
+def _parse_parked_ssm_slots(value: Optional[str]) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        slots = int(value)
+    except ValueError as e:
+        raise ValueError(
+            "TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS must be a non-negative "
+            f"integer, got {value!r}") from e
+    if slots < 0:
+        raise ValueError(
+            "TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS must be a non-negative "
+            f"integer, got {slots}")
+    return slots if slots > 0 else None
+
+
+# Absolute parked-snapshot pool size (decoupled from max_batch_size). None = off.
+PARKED_SSM_SLOTS: Final[Optional[int]] = _parse_parked_ssm_slots(
+    os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS"))
 
 # Replay kernels pad the token/window dimension to at least 16 for tensor-core
 # tiles, so history sizes below 16 are no faster when not writing and do
@@ -1577,6 +1598,26 @@ def _mamba_regular_snapshot_interval(
     return interval
 
 
+def _is_save_last_snapshot_mode(kv_cache_config: KvCacheConfig) -> bool:
+    """True when the only SSM snapshot rule is the prompt-end boundary.
+
+    NEW-tree equivalent of the OLD ``ssm_reuse_interval == 0`` save-last mode:
+    no periodic snapshots, no from-start offsets, and the sole from-end offset
+    is 0 (prompt end). Stale-snapshot pruning and host-first parking are safe
+    only in this mode, because resume always matches the newest boundary and
+    there are no intentional mid-sequence reuse points.
+    """
+    if not kv_cache_config.enable_block_reuse:
+        return False
+    sc = kv_cache_config.mamba_state_config
+    interval = sc.periodic_snapshot_interval
+    if interval is not None and interval > 0:
+        return False
+    if sc.additional_snapshot_offsets_from_start:
+        return False
+    return list(sc.additional_snapshot_offsets_from_end) == [0]
+
+
 def _get_local_mamba_cache_layout(
     model_config,
     mapping: Mapping,
@@ -1657,8 +1698,16 @@ def _estimate_mamba_hybrid_cache_cost(
     else:
         fixed_rules = 0
         unaligned_fixed_rules = 0
+    if (PARKED_SSM_SLOTS is not None and include_explicit_snapshots
+            and _is_save_last_snapshot_mode(kv_cache_config)):
+        # Budget the SSM pool for an absolute parked-snapshot count instead of
+        # one snapshot slot per batch slot. Parked snapshots are per
+        # conversation, not per in-flight microbatch, so no resident multiplier.
+        snapshot_state_slots = PARKED_SSM_SLOTS
+    else:
+        snapshot_state_slots = max_resident_sequences * fixed_rules
     fixed_state_slots = (max_resident_sequences + num_reserved_dummy_slots +
-                         max_resident_sequences * fixed_rules)
+                         snapshot_state_slots)
     attention_block_bytes = attention_slope * tokens_per_block
 
     interval = _mamba_regular_snapshot_interval(kv_cache_config, max_seq_len)
@@ -2619,6 +2668,10 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
             # SSM reuse is valid only at explicit snapshot boundaries.
             kv_cache_config.block_reuse_policy = BlockReusePolicy.PER_REQUEST.value
         self.kv_cache_config = kv_cache_config
+        # Needed by _parked_ssm_snapshot_slots (via _num_ssm_snapshots_for_capacity),
+        # which runs inside super().__init__ -> _build_cache_config. Re-assigned in
+        # the base init afterward (harmless).
+        self.is_estimating_kv_cache = is_estimating_kv_cache
 
         super().__init__(
             kv_cache_config,
@@ -2728,6 +2781,58 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
     def _mamba_state_bytes_per_slot(self) -> int:
         return self.local_num_mamba_layers * (self.ssm_bytes + self.conv_bytes)
 
+    def _parked_ssm_snapshot_slots(
+            self, kv_cache_config: KvCacheConfig) -> Optional[int]:
+        """Explicit parked-snapshot count from TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS.
+
+        None when inactive: knob unset, or KV-cache estimation pass (the temporary
+        estimation manager must not allocate the full snapshot pool from its tiny
+        quota). Raises if the knob is set but the config is not save-last mode.
+        """
+        if PARKED_SSM_SLOTS is None or self.is_estimating_kv_cache:
+            return None
+        if not _is_save_last_snapshot_mode(kv_cache_config):
+            raise ValueError(
+                "TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS requires save-last-snapshot "
+                "mode (periodic_snapshot_interval == 0, no "
+                "additional_snapshot_offsets_from_start, and "
+                "additional_snapshot_offsets_from_end == [0]); unset the "
+                "environment variable or change mamba_state_config.")
+        return PARKED_SSM_SLOTS
+
+    def _validate_parked_ssm_slots(self, parked_slots: int,
+                                   gpu_quota: int) -> None:
+        """Fail loudly if live + parked SSM slots leave no room for attention.
+
+        The planner treats typical_step slot counts as strong pulls and can
+        expand the effective quota to satisfy them, over-allocating GPU memory
+        and OOMing at runtime. Check the math up front: max_batch_size live
+        states + parked snapshots, plus one attention block per resident
+        lineage, must fit the quota.
+        """
+        ssm_slot_bytes = self._mamba_state_bytes_per_slot()
+        if ssm_slot_bytes == 0:
+            return  # No local mamba layers on this rank.
+        attn_block_bytes = (self._attention_cache_bytes_per_token() *
+                            self.tokens_per_block)
+        num_sequences = self._max_resident_sequences()
+        total_ssm_slots = (num_sequences + self._num_reserved_dummy_slots +
+                           parked_slots)
+        ssm_bytes = total_ssm_slots * ssm_slot_bytes
+        min_attn_bytes = num_sequences * attn_block_bytes
+        if ssm_bytes + min_attn_bytes > gpu_quota:
+            max_parked = max(
+                (gpu_quota - min_attn_bytes) // ssm_slot_bytes - num_sequences -
+                self._num_reserved_dummy_slots, 0)
+            raise ValueError(
+                f"TLLM_KV_CACHE_MANAGER_V2_PARKED_SLOTS={parked_slots} does not "
+                f"fit the KV cache device quota: {total_ssm_slots} SSM slots x "
+                f"{ssm_slot_bytes / GB:.3f} GiB/slot = {ssm_bytes / GB:.2f} GiB "
+                f"plus {min_attn_bytes / GB:.2f} GiB minimum attention exceeds "
+                f"the {gpu_quota / GB:.2f} GiB quota. Reduce it to at most "
+                f"~{max_parked}, raise free_gpu_memory_fraction / "
+                "max_gpu_total_bytes, or lower max_batch_size.")
+
     def _num_ssm_snapshots_for_capacity(
         self,
         capacity: int,
@@ -2735,6 +2840,12 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
     ) -> int:
         if capacity <= 0 or not kv_cache_config.enable_block_reuse:
             return 0
+
+        parked_slots = self._parked_ssm_snapshot_slots(kv_cache_config)
+        if parked_slots is not None:
+            # Absolute parked-conversation pool; in save-last mode fixed_rules == 1
+            # and interval is None, so this replaces the per-sequence term.
+            return parked_slots
 
         fixed_rules, _ = _mamba_snapshot_rule_counts(kv_cache_config,
                                                      self.max_seq_len,
@@ -2912,6 +3023,10 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
         typical_ssm_slots = self._ssm_slots_per_request_for_typical_batch(
             planned_capacity, kv_cache_config)
 
+        parked_slots = self._parked_ssm_snapshot_slots(kv_cache_config)
+        if parked_slots is not None:
+            self._validate_parked_ssm_slots(parked_slots, cache_tiers[0].quota)
+
         return KVCacheManagerConfigPy(
             tokens_per_block=tokens_per_block,
             cache_tiers=cache_tiers,
@@ -2933,6 +3048,11 @@ class V2MambaHybridCacheManager(KVCacheManagerV2, MambaHybridCacheManager):
             # flag is harmless when reuse is disabled because no commits are
             # attempted, while the runtime config still needs the invariant.
             commit_min_snapshot=True,
+            # Save-last-snapshot mode enables stale-snapshot pruning and (opt-in)
+            # host-first parking in the runtime layer. Replaces the OLD runtime
+            # `ssm_reuse_interval == 0` gate that PR16598 removed.
+            prune_stale_ssm_snapshots=_is_save_last_snapshot_mode(kv_cache_config),
+            park_ssm_snapshots_to_host=_is_save_last_snapshot_mode(kv_cache_config),
             enable_stats=self.enable_stats,
         )
 

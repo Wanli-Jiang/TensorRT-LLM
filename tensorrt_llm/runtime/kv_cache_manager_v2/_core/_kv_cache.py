@@ -16,11 +16,13 @@
 import array
 import enum
 import math
+import os
 from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Callable, ClassVar, Iterator, NamedTuple, Type, cast
+from typing import (TYPE_CHECKING, Callable, ClassVar, Final, Iterator,
+                    NamedTuple, Type, cast)
 
 from .. import rawref
 from .._block_radix_tree import Block, ReuseMatch, ReuseScope, RootBlock, UselessBlockError
@@ -91,6 +93,22 @@ from ._pending_stats import _PendingStats
 
 if TYPE_CHECKING:
     from ._kv_cache_manager import KVCacheManager, ScratchDesc
+
+# TLLM_KV_CACHE_MANAGER_V2_PRUNE_STALE_SNAPSHOTS=0 restores keep-all behavior.
+# Enabled by default: in save-last-snapshot mode, committing a new SSM snapshot
+# drops the sequence's previous parked snapshot. Multi-turn workloads only ever
+# resume from the newest boundary, so stale snapshots crowd the fixed SSM pool and
+# LRU-evict live parked boundaries, forcing full re-prefill on resume. ANDed with
+# the manager's save-last-mode gate (KVCacheManager.prune_stale_ssm_snapshots).
+PRUNE_STALE_SSM_SNAPSHOTS: Final[bool] = (
+    os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PRUNE_STALE_SNAPSHOTS", "1") == "1")
+
+# TLLM_KV_CACHE_MANAGER_V2_PARK_SSM_TO_HOST=1 (default off): in save-last mode,
+# place SSM snapshots on the first non-GPU tier first (GPU as fallback), so parked
+# conversations hold no GPU SSM slot between turns; the next turn recalls over PCIe.
+# ANDed with the manager's save-last-mode gate and the is_ssm page check.
+PARK_SSM_SNAPSHOTS_TO_HOST: Final[bool] = (
+    os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PARK_SSM_TO_HOST", "0") == "1")
 
 
 @dataclass(slots=True)
@@ -1436,7 +1454,16 @@ class _KVCache:
 
         storage = self.manager._storage
         pg_idx = storage.get_pool_group_index(lc_idx)
-        for lvl in typed_range(src_page.cache_level, storage.num_cache_levels):
+        candidate_levels = list(
+            typed_range(src_page.cache_level, storage.num_cache_levels))
+        if (PARK_SSM_SNAPSHOTS_TO_HOST and is_ssm
+                and self.manager.park_ssm_snapshots_to_host
+                and len(candidate_levels) > 1):
+            # Try non-GPU tiers first (GPU last) so parked SSM snapshots don't
+            # hold GPU slots between turns. SSM pages only; attention stays
+            # GPU-first (this copy loop is shared by both page kinds).
+            candidate_levels = candidate_levels[1:] + candidate_levels[:1]
+        for lvl in candidate_levels:
             try:
                 new_slot = storage.new_slots_for_pool_group(lvl, pg_idx, 1)[0]
             except OutOfPagesError:
@@ -1503,6 +1530,8 @@ class _KVCache:
             )
             storage = self.manager._storage
             storage.schedule_for_eviction(committed)
+            if PRUNE_STALE_SSM_SNAPSHOTS and self.manager.prune_stale_ssm_snapshots:
+                self._drop_previous_ssm_snapshot(tree_block, ssm_lc_id)
             return
 
         self._copy_page_to_tree_block(
@@ -1511,6 +1540,46 @@ class _KVCache:
             src_page,
             ssm_num_tokens_in_block=num_tokens_in_block,
         )
+        if PRUNE_STALE_SSM_SNAPSHOTS and self.manager.prune_stale_ssm_snapshots:
+            self._drop_previous_ssm_snapshot(tree_block, ssm_lc_id)
+
+    def _drop_previous_ssm_snapshot(self, tree_block: Block,
+                                    ssm_lc_id: LifeCycleId) -> None:
+        """Drop this sequence's previous parked SSM snapshot after committing a new one.
+
+        Save-last-snapshot mode only. Resume always matches the newest boundary, so
+        once ``tree_block`` carries a snapshot the previous one only occupies a slot
+        in the fixed SSM pool until LRU eviction. The previous boundary lives either
+        on an on-path ancestor block (block-aligned) or on a covered partial sibling
+        (non-aligned). Walk toward the root and drop the nearest one. Held/locked
+        pages are never dropped: they re-enter the eviction queue on release and a
+        later commit prunes them.
+        """
+        node: Block = tree_block
+        while True:
+            parent = node.prev
+            stale: CommittedPage | None = None
+            node_tokens = node.tokens
+            for sibling in parent.next.values():
+                if sibling is node or len(sibling.tokens) >= len(node_tokens):
+                    continue
+                ref = sibling.storage[ssm_lc_id]
+                page = None if ref is None else ref()
+                if (page is not None
+                        and node_tokens[:len(sibling.tokens)] == sibling.tokens):
+                    stale = page
+                    break
+            if stale is None and isinstance(parent, Block):
+                ref = parent.storage[ssm_lc_id]
+                stale = None if ref is None else ref()
+            if stale is not None:
+                if (stale.status == PageStatus.DROPPABLE
+                        and stale.scheduled_for_eviction):
+                    stale.manager.exclude_from_eviction(stale)
+                return
+            if not isinstance(parent, Block):
+                return
+            node = parent
 
     def _snapshot_partial_block_to_tree(self, ordinal: BlockOrdinal, commit_ssm: bool) -> None:
         tokens_per_block = self.tokens_per_block

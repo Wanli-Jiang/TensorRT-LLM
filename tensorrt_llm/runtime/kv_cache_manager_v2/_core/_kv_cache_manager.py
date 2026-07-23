@@ -905,3 +905,11 @@ class KVCacheManager:
     @property
     def commit_min_snapshot(self) -> bool:
         return self.init_config.commit_min_snapshot
+
+    @property
+    def prune_stale_ssm_snapshots(self) -> bool:
+        return self.init_config.prune_stale_ssm_snapshots
+
+    @property
+    def park_ssm_snapshots_to_host(self) -> bool:
+        return self.init_config.park_ssm_snapshots_to_host
