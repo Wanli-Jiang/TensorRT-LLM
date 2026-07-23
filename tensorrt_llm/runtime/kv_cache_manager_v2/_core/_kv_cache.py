@@ -1797,11 +1797,16 @@ class _KVCache:
             )
 
         if seq_block.is_committed:
-            for lc_idx, lc in self.manager._life_cycles.attention_life_cycles():
-                stale_range = _KVCache._get_stale_range(tokens_per_block, self.history_length, lc)
+            # Distinct names (not `lc`, `lc_idx`): `_commit_block` contains a
+            # lambda + comprehension that make mypyc build a closure env, and
+            # reusing `lc` here aliased the env slot so the compiled unpack
+            # mangled the (id, life_cycle) tuple ("int object expected; got
+            # AttnLifeCycle"). Matches the OLD-final naming.
+            for attn_lc_idx, attn_lc in self.manager._life_cycles.attention_life_cycles():
+                stale_range = _KVCache._get_stale_range(tokens_per_block, self.history_length, attn_lc)
                 if ordinal in stale_range:
                     for beam_block in seq_block.pages:
-                        beam_block[lc_idx] = None
+                        beam_block[attn_lc_idx] = None
 
         if is_last or self._commit_state == self.CommitState.VIRTUAL_STOP:
             self._commit_state = self.CommitState.USER_STOP
