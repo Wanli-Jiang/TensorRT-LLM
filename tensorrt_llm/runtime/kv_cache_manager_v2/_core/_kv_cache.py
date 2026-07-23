@@ -17,6 +17,7 @@ import array
 import enum
 import math
 import os
+import warnings
 from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -69,6 +70,7 @@ from .._stats import KVCacheIterationStatsDelta, KVCacheStatsDelta
 from .._storage._core import Slot
 from .._storage_manager import StorageManager
 from .._utils import (
+    mypyc_attr,
     CachedCudaEvent,
     HalfOpenRange,
     TypedIndexList,
@@ -111,6 +113,7 @@ PARK_SSM_SNAPSHOTS_TO_HOST: Final[bool] = (
     os.environ.get("TLLM_KV_CACHE_MANAGER_V2_PARK_SSM_TO_HOST", "0") == "1")
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class SeqBlock:
     pages: TypedIndexList[BeamIndex, TypedIndexList[LifeCycleId, BlockPage]]
@@ -148,6 +151,7 @@ class SeqBlock:
         self.pages.clear()
 
 
+@mypyc_attr(native_class=False)
 class PlannedDropHandle:
     """Track committed pages planned for dropping without owning them.
 
@@ -242,6 +246,15 @@ IndexSeq = array.array | memoryview
 # three lengths equal to the number of reused tokens.
 # TODO: in __del__, we should check if committed pages are usable for SWA cases. e.g. all pages are
 # dropped except the last one. The last one is not usable.
+class _DeltaScratchSlots(NamedTuple):
+    """Result of _KVCache._take_excess_scratch_slots. Module-level because
+    mypyc cannot compile classes defined inside a class body."""
+
+    excess: TypedIndexList[LifeCycleId, list[ScratchSlotLock]]
+    delta_cnt: TypedIndexList[LifeCycleId, int]
+    scratch_ranges: TypedIndexList[LifeCycleId, HalfOpenRange[BlockOrdinal]]
+
+
 class _KVCache:
     __slots__ = (
         "id",
@@ -274,6 +287,7 @@ class _KVCache:
 
     Status: ClassVar[Type[_Status]] = _Status
     CommitState: ClassVar[Type[_CommitState]] = _CommitState
+    DeltaScratchSlots: ClassVar[Type[_DeltaScratchSlots]] = _DeltaScratchSlots
 
     id: int | None
     _manager: "KVCacheManager"
@@ -604,8 +618,23 @@ class _KVCache:
         manager._living_kv_caches.remove(self.__rawref__)
 
     def __del__(self) -> None:
-        self.close()
-        self.__rawref__.invalidate()
+        # Leak detector ONLY. Closing is an explicit-protocol obligation of
+        # the owner (the executor wrapper closes on every release path, and
+        # tests must close what they create): running close() from a native
+        # finalizer traverses other objects mid-dealloc-cascade, which the
+        # compiled dealloc does not tolerate (attributes are cleared while
+        # sibling finalizers still run). A finalizer must also never raise.
+        try:
+            if self._status != self.Status.CLOSED:
+                warnings.warn(
+                    f"[KVCacheManager] KV cache id={self.id} dropped without "
+                    "close(); its pages leak until manager shutdown")
+        except Exception:
+            pass
+        try:
+            self.__rawref__.invalidate()
+        except Exception:
+            pass
 
     @property
     def beam_width(self) -> BeamIndex:
@@ -776,7 +805,32 @@ class _KVCache:
         new_num_blocks = BlockOrdinal(div_up(capacity, tokens_per_block))
         num_life_cycles = manager._life_cycles.size
         if new_num_blocks < old_num_blocks:
-            assert not self.has_scratch_slots, "Cannot shrink while scratch slots exist"
+            if self.has_scratch_slots:
+                scratch_counts = [len(s) for s in self._scratch_slots]
+                if enable_scratch:
+                    # Scratch reuse is active: shrinking across a block
+                    # boundary with live scratch is a genuine contract
+                    # violation — keep the forensic detail.
+                    raise AssertionError(
+                        f"Cannot shrink while scratch slots exist: id={self.id} "
+                        f"scratch_counts={scratch_counts} "
+                        f"capacity={self._capacity}->{capacity} "
+                        f"history_length={history_length} "
+                        f"num_committed={self.num_committed_tokens} "
+                        f"never_resumed={self._never_resumed} "
+                        f"enable_scratch={enable_scratch}")
+                # Scratch reuse is DISABLED for this cache, so nothing can
+                # reference these slots (get_scratch_desc returns None for
+                # every layer group) — they are leaked resources from a window
+                # before the disable took effect (seen with the mypyc-compiled
+                # module under MTP rewind shrinks). Self-heal instead of
+                # asserting, and warn so occurrences stay visible.
+                warnings.warn(
+                    f"Draining {scratch_counts} leaked scratch slots on shrink "
+                    f"for KV cache id={self.id} (scratch reuse disabled; "
+                    f"capacity {self._capacity}->{capacity})")
+                with self._record_event():
+                    self._free_scratch_slots()
             self._subtract_pending_allocation_range(new_num_blocks, old_num_blocks)
             with self._record_event():
                 del self._blocks[new_num_blocks:]
@@ -1832,12 +1886,7 @@ class _KVCache:
             user = lock._user
             self._block(user.ordinal, user.beam_index)[user.life_cycle] = lock
 
-    class DeltaScratchSlots(NamedTuple):
-        excess: TypedIndexList[LifeCycleId, list[ScratchSlotLock]]
-        delta_cnt: TypedIndexList[LifeCycleId, int]
-        scratch_ranges: TypedIndexList[LifeCycleId, HalfOpenRange[BlockOrdinal]]
-
-    def _take_excess_scratch_slots(self, capacity: int, history_length: int) -> DeltaScratchSlots:
+    def _take_excess_scratch_slots(self, capacity: int, history_length: int) -> "_DeltaScratchSlots":
         """
         Calculate scratch slot requirements and extract excess scratch slots.
 

@@ -171,7 +171,7 @@ class StorageConfig:
                     for layer_id, count in slot_util.items():
                         if layer_id not in ret:
                             ret[layer_id] = LayerAttr(
-                                life_cycle_id, filled_list(0, num_pools), Fraction(0, 1)
+                                life_cycle_id, filled_list(0, PoolIndex(num_pools)), Fraction(0, 1)
                             )
                         attr = ret[layer_id]
                         assert attr.life_cycle_id == life_cycle_id

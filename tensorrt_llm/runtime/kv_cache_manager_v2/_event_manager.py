@@ -321,7 +321,7 @@ class KVCacheEventManager:
             if not self._events and timeout_ms is None:
                 while not self._events:
                     self._condition.wait()
-            elif not self._events and timeout_ms > 0:
+            elif not self._events and timeout_ms is not None and timeout_ms > 0:
                 deadline = time.monotonic() + timeout_ms / 1000
                 while not self._events:
                     remaining = deadline - time.monotonic()

@@ -28,6 +28,7 @@ from ._utils import (
     filled_list,
     find_index,
     map_optional,
+    mypyc_attr,
     typed_enumerate,
     unwrap_rawref,
 )
@@ -37,6 +38,11 @@ if TYPE_CHECKING:
     from ._page import CommittedPage
 
 BlockKey = bytes
+
+# Runtime alias for rawref.ref annotations: with native_class=False classes,
+# mypyc erases rawref.ref[...] to its canonical name and resolves it in THIS
+# module's globals when the class body executes.
+ReferenceType = rawref.ReferenceType
 
 
 class ReuseScope(NamedTuple):
@@ -132,8 +138,17 @@ def sequence_to_blockchain_keys(
 ) -> Iterator[tuple[TokenBlock, BlockKey]]:
     digest = Hasher(reuse_scope.to_bytes()).digest
     yield [], digest
+    sha256 = hashlib.sha256
     for token_block in chunked(tokens, tokens_per_block):
-        digest = Hasher(digest).update(token_block).digest
+        # One C call per block: byte-identical to
+        # Hasher(digest).update(token_block).digest (the Hasher wrapper costs
+        # an object plus two update calls per block, and this loop runs once
+        # per block of every admitted request). Multimodal blocks (bytes
+        # items) fall back to the Hasher path.
+        try:
+            digest = sha256(digest + array("Q", token_block).tobytes()).digest()
+        except (TypeError, OverflowError):
+            digest = Hasher(digest).update(token_block).digest
         yield token_block, digest
 
 
@@ -142,11 +157,12 @@ Children = dict[BlockKey, Child]
 
 
 def try_get_tree(block: "RootBlock | Block") -> "BlockRadixTree | None":
-    node = block
+    node: "BlockRadixTree | Block | RootBlock" = block
     while not isinstance(node, BlockRadixTree):
-        node = node._prev()
-        if node is None:
+        prev = node._prev()
+        if prev is None:
             return None
+        node = prev
     return node
 
 
@@ -316,6 +332,7 @@ class RootBlock:
         return Hasher(reuse_scope.to_bytes()).digest
 
 
+@mypyc_attr(native_class=False)
 class Block:
     """
     A block of tokens. Manages data for all layers.
@@ -448,7 +465,7 @@ class Block:
         # It's possible to implement more sophisticated logic to remove useless blocks for SWA, e.g.
         # check if consecutive available blocks is sufficient for window_size. (TRTLLM-8802)
         # But for simplicity, we leave it for now.
-        curr = start
+        curr: "Block | RootBlock" = start
         while (
             (isinstance(curr, Block) and curr.storage[lc_idx] is None)
             and not curr.next

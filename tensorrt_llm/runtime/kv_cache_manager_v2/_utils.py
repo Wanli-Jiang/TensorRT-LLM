@@ -105,40 +105,69 @@ def exact_div(x: int, y: int) -> int:
 
 Idx = TypeVar("Idx", bound=int)
 
+try:
+    from mypy_extensions import mypyc_attr
+except ImportError:  # mypy_extensions only matters when compiling with mypyc
 
-class HalfOpenRange(tuple[Idx, Idx], Generic[Idx]):
+    def mypyc_attr(**_kwargs: bool):  # type: ignore[misc]
+        def deco(cls: type) -> type:
+            return cls
+
+        return deco
+
+
+@mypyc_attr(native_class=False)
+class HalfOpenRange(Generic[Idx]):
     """A half-open range [beg, end). Falsy when empty (beg >= end).
-    Generic over index type. Supports unpacking into (beg, end)."""
+    Generic over index type. Supports unpacking into (beg, end).
 
-    __slots__ = ()
+    Plain slotted class (not a tuple subclass): mypyc cannot natively compile
+    tuple subclasses, and a compiled tuple-subclass HalfOpenRange is the root
+    cause of the "Cannot shrink" scratch-slot crash. Empty-range equality is
+    normalized (any two empty ranges compare and hash equal), preserving the
+    prior tuple-subclass semantics.
+    """
 
-    def __new__(cls, beg: Idx, end: Idx) -> "HalfOpenRange[Idx]":
-        return tuple.__new__(cls, (beg, end))
+    __slots__ = ("beg", "end")
 
-    @property
-    def beg(self) -> Idx:
-        return self[0]
+    def __init__(self, beg: Idx, end: Idx) -> None:
+        self.beg = beg
+        self.end = end
 
-    @property
-    def end(self) -> Idx:
-        return self[1]
+    def __iter__(self) -> "Iterator[Idx]":
+        yield self.beg
+        yield self.end
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, HalfOpenRange):
-            return NotImplemented
-        return (not self and not other) or tuple.__eq__(self, other)
+    def __getitem__(self, index: int) -> Idx:
+        if index == 0 or index == -2:
+            return self.beg
+        if index == 1 or index == -1:
+            return self.end
+        raise IndexError(index)
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, HalfOpenRange):
+            if not self and not other:
+                return True
+            return self.beg == other.beg and self.end == other.end
+        if isinstance(other, tuple):
+            return len(other) == 2 and self.beg == other[0] and self.end == other[1]
+        return NotImplemented
 
     def __hash__(self) -> int:
-        return hash((0, 0)) if not self else tuple.__hash__(self)
+        return hash((0, 0)) if not self else hash((self.beg, self.end))
+
+    def __repr__(self) -> str:
+        return f"HalfOpenRange({self.beg!r}, {self.end!r})"
 
     def __bool__(self) -> bool:
-        return self[0] < self[1]
+        return self.beg < self.end
 
     def __len__(self) -> int:
-        return max(0, self[1] - self[0])
+        return max(0, self.end - self.beg)
 
     def __contains__(self, item: Any) -> bool:
-        return self[0] <= item < self[1]
+        return self.beg <= item < self.end
 
 
 def intersect(a: HalfOpenRange[Idx], b: HalfOpenRange[Idx]) -> HalfOpenRange[Idx]:

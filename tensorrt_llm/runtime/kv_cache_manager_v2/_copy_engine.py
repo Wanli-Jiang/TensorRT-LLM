@@ -122,7 +122,11 @@ def _copy_disk_to_disk(tasks: Sequence[CopyTask], num_bytes: int, stream: CudaSt
 def _copy_gpu_to_host(tasks: Sequence[CopyTask], num_bytes: int, stream: CudaStream):
     _unwrap(
         drv.CUresult(
-            copy_device_to_host([MemToMemTask(dst, src) for dst, src in tasks], num_bytes, stream)
+            copy_device_to_host(
+                [MemToMemTask(cast(int, dst), cast(int, src)) for dst, src in tasks],
+                num_bytes,
+                stream,
+            )
         )
     )
 
@@ -130,7 +134,11 @@ def _copy_gpu_to_host(tasks: Sequence[CopyTask], num_bytes: int, stream: CudaStr
 def _copy_host_to_gpu(tasks: Sequence[CopyTask], num_bytes: int, stream: CudaStream):
     _unwrap(
         drv.CUresult(
-            copy_host_to_device([MemToMemTask(dst, src) for dst, src in tasks], num_bytes, stream)
+            copy_host_to_device(
+                [MemToMemTask(cast(int, dst), cast(int, src)) for dst, src in tasks],
+                num_bytes,
+                stream,
+            )
         )
     )
 

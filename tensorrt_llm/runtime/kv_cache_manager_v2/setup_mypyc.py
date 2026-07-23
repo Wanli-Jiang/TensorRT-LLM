@@ -57,11 +57,21 @@ warn_return_any = False
 warn_unused_ignores = False
 
 # Disable type validation errors (for external types like drv.CUstream)
-disable_error_code = valid-type
-""")
+# and annotation-completeness noise. Genuine type mismatches (assignment,
+# arg-type, index) stay ON: mypyc trusts declared types when generating C,
+# so silencing those would turn static errors into runtime crashes.
+disable_error_code = valid-type, no-untyped-def, no-untyped-call, no-any-return, type-arg, import-untyped, import-not-found, import, var-annotated, comparison-overlap
 
-# Point mypy to this config by adding to sys.argv before mypyc runs
-sys.argv.extend(["--config-file", mypy_config_path])
+# External stubs (nanobind-generated .pyi) are not our code and are not
+# compiled — never let their type errors fail the build.
+[mypy-tensorrt_llm.*]
+ignore_errors = True
+follow_imports = skip
+
+[mypy-torch.*]
+ignore_errors = True
+follow_imports = skip
+""")
 
 # List all Python modules in kv_cache_manager_v2 to compile
 #
@@ -73,12 +83,14 @@ modules = [
     "kv_cache_manager_v2/__init__.py",
     "kv_cache_manager_v2/_block_radix_tree.py",
     "kv_cache_manager_v2/_common.py",
-    "kv_cache_manager_v2/_config.py",
+    # _config.py excluded: `type: ClassVar[...] = ...` dataclass pattern loses
+    # ClassVar semantics under mypyc (TypeError at import). Cold config code.
+    # _introspection.py excluded: cold dynamic-getattr shim, C++-backend
+    # forward-compat; nothing to gain and it adds compile surface.
     "kv_cache_manager_v2/_copy_engine.py",
     "kv_cache_manager_v2/_cuda_virt_mem.py",
     "kv_cache_manager_v2/_event_manager.py",
     "kv_cache_manager_v2/_exceptions.py",
-    "kv_cache_manager_v2/_introspection.py",
     "kv_cache_manager_v2/_life_cycle_registry.py",
     "kv_cache_manager_v2/_page.py",
     "kv_cache_manager_v2/_storage_manager.py",
@@ -103,7 +115,10 @@ print("")
 
 try:
     ext_modules = mypycify(
-        modules,
+        # mypycify accepts mypy CLI options alongside paths; putting the
+        # config here (NOT in sys.argv, which mypycify never reads) is the
+        # only way the relaxed config above actually takes effect.
+        [f"--config-file={mypy_config_path}", *modules],
         opt_level="3",  # Maximum optimization
         multi_file=True,  # Allow cross-module references (needed for inheritance)
         verbose=True,  # Show what's being compiled

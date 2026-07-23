@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple, cast
@@ -44,6 +45,7 @@ from ._exceptions import LogicError
 from ._life_cycle_registry import LifeCycleId
 from ._storage._core import Slot
 from ._utils import (
+    mypyc_attr,
     CachedCudaEvent,
     assert_critical,
     filled_list,
@@ -59,6 +61,7 @@ ReferenceType = rawref.ReferenceType
 
 # We will have a huge amount of pages for large storage capacity.
 # So we prefer inheritance over composition to save some memory.
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class Page(Slot):
     _manager: ReferenceType["StorageManager"]
@@ -125,6 +128,7 @@ class Page(Slot):
         raise LogicError("Unexpected call to this implementation.")
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class UncommittedPage(Page):
     # @TODO: consider move this to _PageHolder
@@ -226,6 +230,7 @@ class UncommittedPage(Page):
         Page.__del__(self)
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class CommittedPage(Page):
     """A committed page is immutable — all access after commit is read-only.
@@ -286,6 +291,7 @@ class CommittedPage(Page):
         self.__rawref__.invalidate()
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class SsmCommittedPage(CommittedPage):
     num_tokens_in_block: int
@@ -305,6 +311,7 @@ class SsmCommittedPage(CommittedPage):
         CommittedPage.__init__(self, storage, block, life_cycle, cache_level, slot, priority)
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class _PageHolder:
     "Prevents pages from being dropped."
@@ -357,6 +364,7 @@ class _PageHolder:
         return lock.share(kv_cache, beam_index, ordinal, life_cycle, skip_wait)
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class _UniqPageLock:
     "Locks pages to prevent eviction."
@@ -426,6 +434,7 @@ class LockOwner(NamedTuple):
     life_cycle: LifeCycleId
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True, init=False)
 class _SharedPageLock:
     _uniq_lock: _UniqPageLock | None
@@ -548,6 +557,7 @@ def batched_lock_to_gpu(
     ]
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class ScratchSlotLock:
     slot: Slot

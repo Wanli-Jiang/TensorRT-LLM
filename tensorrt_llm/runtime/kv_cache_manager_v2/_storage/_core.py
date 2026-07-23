@@ -41,6 +41,7 @@ from .._common import (
 from .._cuda_virt_mem import PooledPhysMemAllocator, VirtMem
 from .._exceptions import LogicError, OutOfPagesError
 from .._utils import (
+    mypyc_attr,
     CachedCudaEvent,
     DynamicBitset,
     HomoTuple,
@@ -242,6 +243,7 @@ class DiskSlotPool(SlotPoolBase):
         return self.file_size // self.slot_size
 
 
+@mypyc_attr(native_class=False)
 @dataclass(slots=True)
 class Slot:
     # ready_event indicates whether the slot is ready for use.
