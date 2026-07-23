@@ -112,8 +112,18 @@ class LifeCycleRegistry:
     def __getitem__(self, idx: LifeCycleId) -> LifeCycle:
         return self._life_cycle_list[idx]
 
-    def items(self) -> Iterator[tuple[LifeCycleId, LifeCycle]]:
-        return typed_enumerate(self.get())
+    def items(self) -> list[tuple[LifeCycleId, LifeCycle]]:
+        # Explicit list instead of enumerate(): mypyc-robust (see
+        # attention_life_cycles). Behavior-identical for the for-loop callers.
+        lc_list = self._life_cycle_list
+        result: list[tuple[LifeCycleId, LifeCycle]] = []
+        n = len(lc_list)
+        i = 0
+        while i < n:
+            lc_id = LifeCycleId(i)
+            result.append((lc_id, lc_list[lc_id]))
+            i += 1
+        return result
 
     def get(self) -> TypedIndexList[LifeCycleId, LifeCycle]:
         return self._life_cycle_list
@@ -129,10 +139,23 @@ class LifeCycleRegistry:
     def has_ssm(self) -> bool:
         return ssm_life_cycle in self._life_cycle_id_dict
 
-    def attention_life_cycles(self) -> Iterator[tuple[LifeCycleId, AttnLifeCycle]]:
-        for lc_id, lc in self.items():
+    def attention_life_cycles(self) -> list[tuple[LifeCycleId, AttnLifeCycle]]:
+        # Explicit index loop instead of a generator over enumerate(): the
+        # compiled (mypyc) generator form mis-yielded the (id, life_cycle)
+        # tuple, surfacing as "int object expected; got AttnLifeCycle" when a
+        # caller unpacked it. An explicit list with explicit LifeCycleId +
+        # tuple construction is behavior-identical and mypyc-robust.
+        result: list[tuple[LifeCycleId, AttnLifeCycle]] = []
+        lc_list = self._life_cycle_list
+        n = len(lc_list)
+        i = 0
+        while i < n:
+            lc_id = LifeCycleId(i)
+            lc = lc_list[lc_id]
             if isinstance(lc, AttnLifeCycle):
-                yield lc_id, lc
+                result.append((lc_id, lc))
+            i += 1
+        return result
 
 
 def compute_scratch_range(
