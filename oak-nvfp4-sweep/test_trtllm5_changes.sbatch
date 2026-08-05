@@ -91,4 +91,3 @@ srun --mpi=pmix --kill-on-bad-exit=1 \
     ' | tee "${HANDOFF_ROOT}/logs/test-${SLURM_JOB_ID}.log"
 
 git -C "${TRTLLM5_REPO}" diff --check
-
