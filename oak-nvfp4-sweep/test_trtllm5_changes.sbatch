@@ -64,7 +64,7 @@ srun --mpi=pmix --kill-on-bad-exit=1 \
         python3 -m pip install --upgrade \
             mako parameterized pre-commit pytest==9.0.3 pytest-mock
 
-        pre-commit run --files \
+        python3 -m pre_commit run --files \
             cpp/tensorrt_llm/kernels/trtllmGenKernels/blockScaleMoe/DevKernel.cu \
             cpp/tensorrt_llm/kernels/trtllmGenKernels/blockScaleMoe/DevKernel.h \
             cpp/tensorrt_llm/kernels/trtllmGenKernels/blockScaleMoe/runner.cu \

@@ -60,6 +60,7 @@ srun --mpi=pmix --kill-on-bad-exit=1 \
 
         cache_root="${CONTAINER_HANDOFF}/cache/job-${SLURM_JOB_ID}"
         export CCACHE_DIR="${CONTAINER_HANDOFF}/cache/ccache"
+        export PIP_CACHE_DIR="${CONTAINER_HANDOFF}/cache/pip"
         export XDG_CACHE_HOME="${cache_root}/xdg"
         export CUDA_CACHE_PATH="${cache_root}/cuda"
         export FLASHINFER_WORKSPACE_BASE="${cache_root}/flashinfer"
@@ -68,7 +69,8 @@ srun --mpi=pmix --kill-on-bad-exit=1 \
         export TORCH_EXTENSIONS_DIR="${cache_root}/torch-extensions"
         export NUMBA_CACHE_DIR="${cache_root}/numba"
         export HF_HOME="${cache_root}/hf"
-        mkdir -p "${CCACHE_DIR}" "${XDG_CACHE_HOME}" "${CUDA_CACHE_PATH}" \
+        mkdir -p "${CCACHE_DIR}" "${PIP_CACHE_DIR}" "${XDG_CACHE_HOME}" \
+            "${CUDA_CACHE_PATH}" \
             "${FLASHINFER_WORKSPACE_BASE}" "${TRITON_CACHE_DIR}" \
             "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_EXTENSIONS_DIR}" \
             "${NUMBA_CACHE_DIR}" "${HF_HOME}"
