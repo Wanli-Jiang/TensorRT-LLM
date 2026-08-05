@@ -152,8 +152,16 @@ The validation checks:
 - no loaded TensorRT-LLM module comes from TRTLLM3, TRTLLM4, or a stock image;
 - `trtllm-serve --help` works from the persistent development environment.
 
-Focused tests for the migrated changes are listed in the build script. Run
-them before using this checkout as a benchmark baseline.
+Run the focused lint and regression suite before using this checkout as a
+benchmark baseline:
+
+```bash
+sbatch ${TRTLLM5_HANDOFF}/test_trtllm5_changes.sbatch \
+  ${TRTLLM5_BASE_IMAGE} ${TRTLLM5_REPO}
+```
+
+The suite covers draft KV sizing, fallback tactic selection, MTP metadata
+restoration, DeepGEMM chunking, and the associated MoE scheduler behavior.
 
 ## Isolation rules for the next Codex
 
