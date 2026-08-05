@@ -110,6 +110,9 @@ Build products remain in the TRTLLM5 checkout:
 
 No wheel or sqsh is produced by this workflow.
 
+Slurm stdout, validation output, and build-identity manifests are written to
+`oak-nvfp4-sweep/logs/`. Generated logs are ignored by Git.
+
 ## Interactive local development
 
 After the build succeeds, start an interactive allocation with both TRTLLM5

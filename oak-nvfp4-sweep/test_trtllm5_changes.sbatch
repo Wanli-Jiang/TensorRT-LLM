@@ -14,6 +14,7 @@
 #SBATCH --time=01:30:00
 #SBATCH --exclusive
 #SBATCH --segment=1
+#SBATCH --output=/lustre/fsw/portfolios/coreai/users/williamj/TRTLLM5/oak-nvfp4-sweep/logs/%x-%j.slurm.log
 
 set -euo pipefail
 
