@@ -65,10 +65,14 @@ TRTLLM5 commit. The following image is a known GB300/SM100 toolchain starting
 point; its installed TensorRT-LLM package is not used as the runtime identity:
 
 ```bash
-export TRTLLM5_BASE_IMAGE=/lustre/fsw/portfolios/coreai/users/williamj/containers/trtllm-sbsa-16694-base-20260731-f08f927600-moe-opt-native-fix.sqsh
+export TRTLLM5_BASE_IMAGE=/lustre/fsw/portfolios/coreai/users/williamj/containers/trtllm-sbsa-16694-base-20260731-built3.sqsh
 export TRTLLM5_REPO=/lustre/fsw/portfolios/coreai/users/williamj/TRTLLM5
 export TRTLLM5_HANDOFF=${TRTLLM5_REPO}/oak-nvfp4-sweep
 ```
+
+Do not use the smaller `moe-opt-native-fix.sqsh` as the build toolchain: it is
+a runtime image and does not contain `nvcc`. It remains suitable as a serving
+base only after the TRTLLM5 native artifacts have been packaged separately.
 
 ## Clean local-development build
 
@@ -176,4 +180,3 @@ restoration, DeepGEMM chunking, and the associated MoE scheduler behavior.
    SHA256, Slurm job ID, and nodes for every benchmark.
 6. Keep NVFP4 sweep code separate from the excluded group-4 FP8 combine work
    until that experiment has completed and is explicitly selected for porting.
-
