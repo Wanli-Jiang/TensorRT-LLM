@@ -72,6 +72,29 @@ srun --mpi=pmix --kill-on-bad-exit=1 \
             "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_EXTENSIONS_DIR}" \
             "${NUMBA_CACHE_DIR}" "${HF_HOME}"
 
+        # --linking_install_binary replaces these generated Python trees with
+        # symlinks.  A previous copy-based build can leave an ignored real
+        # directory behind, which build_wheel.py cannot remove with unlink().
+        # Quarantine only untracked generated trees; never move source files.
+        stale_root="${CONTAINER_HANDOFF}/cache/stale-install/job-${SLURM_JOB_ID}"
+        for relative_path in \
+            tensorrt_llm/deep_ep \
+            tensorrt_llm/deep_gemm \
+            tensorrt_llm/flash_mla; do
+            install_path="${CONTAINER_REPO}/${relative_path}"
+            if [[ -e "${install_path}" && ! -L "${install_path}" ]]; then
+                tracked_files="$(git ls-files -- "${relative_path}")"
+                if [[ -n "${tracked_files}" ]]; then
+                    echo "ERROR: refusing to replace tracked tree ${relative_path}" >&2
+                    exit 2
+                fi
+                mkdir -p "${stale_root}"
+                quarantine_name="${relative_path//\//__}"
+                mv -- "${install_path}" "${stale_root}/${quarantine_name}"
+                echo "Quarantined stale generated tree: ${relative_path}"
+            fi
+        done
+
         build_args=(
             --use_ccache
             --cuda_architectures 100-real
@@ -135,4 +158,3 @@ EOF
     '
 
 git -C "${TRTLLM5_REPO}" diff --check
-
