@@ -1,0 +1,402 @@
+From 26978300a9996dd213916590cfdfcef850d2caec Mon Sep 17 00:00:00 2001
+From: Wanli Jiang <35160485+Wanli-Jiang@users.noreply.github.com>
+Date: Sun, 2 Aug 2026 01:34:07 -0700
+Subject: [PATCH] fix: key GDN T=1 compile cache by batch and layout
+
+(cherry picked from commit baad0dca27d165341d188b895f3ab161e8098344)
+Signed-off-by: Wanli Jiang <35160485+Wanli-Jiang@users.noreply.github.com>
+---
+ .../gdn_kernels/gdn_decode_bf16_state.py      | 153 ++++++++++++++----
+ ...st_decode_pretranspose_bf16_padded_pool.py | 108 +++++++++++++
+ 2 files changed, 226 insertions(+), 35 deletions(-)
+
+diff --git a/flashinfer/gdn_kernels/gdn_decode_bf16_state.py b/flashinfer/gdn_kernels/gdn_decode_bf16_state.py
+index 62d71439..35705966 100644
+--- a/flashinfer/gdn_kernels/gdn_decode_bf16_state.py
++++ b/flashinfer/gdn_kernels/gdn_decode_bf16_state.py
+@@ -73,6 +73,25 @@ def _mark_index_dynamic(torch_t: torch.Tensor, *, assumed_align: int = 32):
+     ).mark_compact_shape_dynamic(mode=0, stride_order=stride_order, divisibility=1)
+ 
+ 
++def _tensor_layout_key(
++    torch_t: torch.Tensor,
++) -> tuple[tuple[int, ...], tuple[int, ...]]:
++    """Return the concrete shape/stride signature used by a static descriptor."""
++    return tuple(torch_t.shape), tuple(torch_t.stride())
++
++
++def _batch_descriptor(torch_t: torch.Tensor, *, static: bool):
++    if static:
++        return from_dlpack(torch_t, assumed_align=32, enable_tvm_ffi=True)
++    return _mark_batch_dynamic(torch_t)
++
++
++def _index_descriptor(torch_t: torch.Tensor, *, static: bool):
++    if static:
++        return from_dlpack(torch_t, assumed_align=32, enable_tvm_ffi=True)
++    return _mark_index_dynamic(torch_t)
++
++
+ # ==============================================================================
+ # FMA WRAPPER FUNCTIONS (SM90 Compatibility)
+ # ==============================================================================
+@@ -2444,6 +2463,7 @@ def run_gdn_decode_bf16state_mtp_ilp4(
+     H: cutlass.Constexpr[int],
+     K: cutlass.Constexpr[int],
+     V: cutlass.Constexpr[int],
++    static_batch_size: cutlass.Constexpr[int],
+     tile_v_param: cutlass.Constexpr[int],
+     use_qk_l2norm: cutlass.Constexpr[bool],
+     disable_state_update: cutlass.Constexpr[bool],
+@@ -2468,7 +2488,16 @@ def run_gdn_decode_bf16state_mtp_ilp4(
+     )
+ 
+     num_v_tiles = cute.ceil_div(v_dim, tile_v)
+-    B = cute.size(q.shape[0])
++    # T=1 serving CUDA graphs use one cubin per batch bucket.  Keeping B in
++    # the CuTe compile signature prevents its internal compile cache from
++    # reusing a cubin across buckets, while the dynamic tensor descriptors
++    # below continue to support packed/non-compact QKV views.  Actual MTP
++    # (T>=2) passes 0 and retains the upstream batch-dynamic behavior.
++    B = (
++        static_batch_size
++        if cutlass.const_expr(static_batch_size > 0)
++        else cute.size(q.shape[0])
++    )
+     grid_size = B * HV * num_v_tiles
+ 
+     smem_bytes = 128
+@@ -2641,6 +2670,7 @@ def _run_wide_vec_t1(
+     H: cutlass.Constexpr[int],
+     K: cutlass.Constexpr[int],
+     V: cutlass.Constexpr[int],
++    batch_size: cutlass.Constexpr[int],
+     tile_v: cutlass.Constexpr[int],
+     use_qk_l2norm: cutlass.Constexpr[bool],
+     disable_state_update: cutlass.Constexpr[bool],
+@@ -2650,8 +2680,7 @@ def _run_wide_vec_t1(
+     stream: cuda.CUstream,
+ ):
+     num_v_tiles: cutlass.Constexpr[int] = V // tile_v
+-    B = cute.size(q.shape[0])
+-    grid_size = B * HV * num_v_tiles
++    grid_size = batch_size * HV * num_v_tiles
+     smem_bytes = (
+         4 * T * (K + 8)  # sQ FP32
+         + 4 * T * (K + 8)  # sK FP32
+@@ -3410,6 +3439,7 @@ def gated_delta_rule_t1_wide_vec(
+         pool_slot_stride = tuple(int(s) for s in initial_state_source.stride())
+     cache_key = (
+         "v3_mtp_bf16_tiled_dynB",
++        B_val,
+         T_val,
+         H_val,
+         HV_val,
+@@ -3426,15 +3456,30 @@ def gated_delta_rule_t1_wide_vec(
+         softplus_threshold,
+         use_packed_fma,
+         same_pool,
++        _tensor_layout_key(q),
++        _tensor_layout_key(k),
++        _tensor_layout_key(v),
++        _tensor_layout_key(a),
++        _tensor_layout_key(b),
++        _tensor_layout_key(output)
++        if output is not None
++        else (
++            (B_val, T_val, HV_val, V_val),
++            (T_val * HV_val * V_val, HV_val * V_val, V_val, 1),
++        ),
++        _tensor_layout_key(initial_state_indices),
+     )
+ 
+     if cache_key not in _compiled_kernels_wide_vec:
+-        # Compile-time template tensors at B=1; cubin runs at caller's
+-        # actual B via _mark_batch_dynamic. cache_key omits B by design
+-        # (upstream batch-dynamic).
+-        _placeholder_indices = torch.arange(1, dtype=torch.int32, device=q.device)
++        # Keep T=1 cubins batch- and layout-specific in both the Python cache
++        # and CuTe's compile signature.  A concrete descriptor is important at
++        # B=1/T=1: several dimensions have size one, so mark_layout_dynamic()
++        # cannot uniquely recover which dimension owns each runtime stride.
++        # Keying every caller-visible layout retains packed/non-compact QKV
++        # support without relying on that ambiguous dynamic descriptor.
++        _placeholder_indices = torch.arange(B_val, dtype=torch.int32, device=q.device)
+         _placeholder_output = torch.empty(
+-            1, T_val, HV_val, V_val, device=q.device, dtype=q.dtype
++            B_val, T_val, HV_val, V_val, device=q.device, dtype=q.dtype
+         )
+ 
+         if contiguous_pool:
+@@ -3448,18 +3493,24 @@ def gated_delta_rule_t1_wide_vec(
+             inter_ = from_dlpack(
+                 intermediate_states, assumed_align=32, enable_tvm_ffi=True
+             )
+-        q_ = _mark_batch_dynamic(q)
+-        k_ = _mark_batch_dynamic(k)
+-        v_ = _mark_batch_dynamic(v)
+-        a_ = _mark_batch_dynamic(a)
+-        b_ = _mark_batch_dynamic(b)
++        q_ = from_dlpack(q, assumed_align=32, enable_tvm_ffi=True)
++        k_ = from_dlpack(k, assumed_align=32, enable_tvm_ffi=True)
++        v_ = from_dlpack(v, assumed_align=32, enable_tvm_ffi=True)
++        a_ = from_dlpack(a, assumed_align=32, enable_tvm_ffi=True)
++        b_ = from_dlpack(b, assumed_align=32, enable_tvm_ffi=True)
+         A_log_ = from_dlpack(A_log, assumed_align=32, enable_tvm_ffi=True)
+         dt_bias_ = from_dlpack(dt_bias, assumed_align=32, enable_tvm_ffi=True)
+-        o_ = _mark_batch_dynamic(output if output is not None else _placeholder_output)
+-        h0_idx_ = _mark_index_dynamic(
++        o_ = from_dlpack(
++            output if output is not None else _placeholder_output,
++            assumed_align=32,
++            enable_tvm_ffi=True,
++        )
++        h0_idx_ = from_dlpack(
+             initial_state_indices
+             if initial_state_indices is not None
+-            else _placeholder_indices
++            else _placeholder_indices,
++            assumed_align=32,
++            enable_tvm_ffi=True,
+         )
+         h0_out_idx_ = h0_idx_
+ 
+@@ -3486,6 +3537,7 @@ def gated_delta_rule_t1_wide_vec(
+                 H_val,
+                 K_val,
+                 V_val,
++                B_val,
+                 tile_v,
+                 use_qk_l2norm_in_kernel,
+                 effective_disable_final,
+@@ -3775,6 +3827,7 @@ def gated_delta_rule_mtp(
+         pool_slot_stride = tuple(int(s) for s in initial_state_source.stride())
+     cache_key = (
+         "mtp_bf16_dynB",
++        B if T == 1 else -1,
+         T,
+         H,
+         HV,
+@@ -3796,17 +3849,39 @@ def gated_delta_rule_mtp(
+         per_request_accepted_steps,
+         per_token_pool_scatter,
+         per_token_pool_scatter_flat,
++        (
++            _tensor_layout_key(q),
++            _tensor_layout_key(k),
++            _tensor_layout_key(v),
++            _tensor_layout_key(a),
++            _tensor_layout_key(b),
++            _tensor_layout_key(output)
++            if output is not None
++            else ((B, T, HV, V), (T * HV * V, HV * V, V, 1)),
++            _tensor_layout_key(initial_state_indices)
++            if initial_state_indices is not None
++            else ((B,), (1,)),
++        )
++        if T == 1
++        else None,
+     )
+ 
+     if cache_key not in _compiled_kernels_mtp:
+-        # Compile-time template tensors at B=1; cubin runs at caller's
+-        # actual B via _mark_batch_dynamic. cache_key omits B by design
+-        # (upstream batch-dynamic).
+-        _placeholder_indices = torch.arange(1, dtype=torch.int32, device=q.device)
+-        _placeholder_output = torch.empty(1, T, HV, V, device=q.device, dtype=q.dtype)
+-        _placeholder_accepted_steps = torch.zeros(1, dtype=torch.int32, device=q.device)
++        # T=1 reaches this fallback for the smallest batches.  Its batch size
++        # and concrete tensor layouts are compile-time arguments.  Actual MTP
++        # (T>=2) passes a zero sentinel and retains batch-dynamic descriptors.
++        placeholder_batch = B if T == 1 else 1
++        _placeholder_indices = torch.arange(
++            placeholder_batch, dtype=torch.int32, device=q.device
++        )
++        _placeholder_output = torch.empty(
++            placeholder_batch, T, HV, V, device=q.device, dtype=q.dtype
++        )
++        _placeholder_accepted_steps = torch.zeros(
++            placeholder_batch, dtype=torch.int32, device=q.device
++        )
+         _placeholder_ssm_state_indices = torch.zeros(
+-            1, T, dtype=torch.int32, device=q.device
++            placeholder_batch, T, dtype=torch.int32, device=q.device
+         )
+ 
+         if contiguous_pool:
+@@ -3821,29 +3896,36 @@ def gated_delta_rule_mtp(
+             inter_ = from_dlpack(
+                 intermediate_states, assumed_align=32, enable_tvm_ffi=True
+             )
+-        q_ = _mark_batch_dynamic(q)
+-        k_ = _mark_batch_dynamic(k)
+-        v_ = _mark_batch_dynamic(v)
+-        a_ = _mark_batch_dynamic(a)
+-        b_ = _mark_batch_dynamic(b)
++        static_t1_layout = T == 1
++        q_ = _batch_descriptor(q, static=static_t1_layout)
++        k_ = _batch_descriptor(k, static=static_t1_layout)
++        v_ = _batch_descriptor(v, static=static_t1_layout)
++        a_ = _batch_descriptor(a, static=static_t1_layout)
++        b_ = _batch_descriptor(b, static=static_t1_layout)
+         A_log_ = from_dlpack(A_log, assumed_align=32, enable_tvm_ffi=True)
+         dt_bias_ = from_dlpack(dt_bias, assumed_align=32, enable_tvm_ffi=True)
+-        o_ = _mark_batch_dynamic(output if output is not None else _placeholder_output)
+-        h0_idx_ = _mark_index_dynamic(
++        o_ = _batch_descriptor(
++            output if output is not None else _placeholder_output,
++            static=static_t1_layout,
++        )
++        h0_idx_ = _index_descriptor(
+             initial_state_indices
+             if initial_state_indices is not None
+-            else _placeholder_indices
++            else _placeholder_indices,
++            static=static_t1_layout,
+         )
+         h0_out_idx_ = h0_idx_
+-        acc_steps_ = _mark_index_dynamic(
++        acc_steps_ = _index_descriptor(
+             accepted_steps
+             if accepted_steps is not None
+-            else _placeholder_accepted_steps
++            else _placeholder_accepted_steps,
++            static=static_t1_layout,
+         )
+-        ssm_idx_ = _mark_index_dynamic(
++        ssm_idx_ = _index_descriptor(
+             ssm_state_indices
+             if ssm_state_indices is not None
+-            else _placeholder_ssm_state_indices
++            else _placeholder_ssm_state_indices,
++            static=static_t1_layout,
+         )
+ 
+         _compiled_kernels_mtp[cache_key] = {
+@@ -3871,6 +3953,7 @@ def gated_delta_rule_mtp(
+                 H,
+                 K,
+                 V,
++                B if T == 1 else 0,
+                 tile_v,
+                 use_qk_l2norm_in_kernel,
+                 disable_state_update,
+diff --git a/tests/gdn/test_decode_pretranspose_bf16_padded_pool.py b/tests/gdn/test_decode_pretranspose_bf16_padded_pool.py
+index c64e0e3f..9558e71e 100644
+--- a/tests/gdn/test_decode_pretranspose_bf16_padded_pool.py
++++ b/tests/gdn/test_decode_pretranspose_bf16_padded_pool.py
+@@ -180,3 +180,111 @@ def test_decode_bf16_pool_strided(B: int, batch_label: str, pool_layout: str) ->
+         atol=0.0,
+         rtol=0.0,
+     )
++
++
++def test_decode_bf16_t1_cache_is_batch_specific() -> None:
++    """T=1 cubins must not be reused across CUDA-graph batch buckets."""
++    _skip_if_not_sm90_or_later()
++
++    from flashinfer.gdn_kernels.gdn_decode_bf16_state import (
++        _compiled_kernels_mtp,
++        _compiled_kernels_wide_vec,
++        gated_delta_rule,
++    )
++
++    device = torch.device("cuda")
++    T, H, HV, K, V = 1, 16, 32, 128, 128
++    pool_size = 64
++    with device:
++        # Keep a padded pool and packed QKV views across the whole descending
++        # ladder, matching serving's non-compact decode layout.
++        pool_storage = torch.zeros(pool_size, HV + 2, V, K, dtype=torch.bfloat16)
++        pool = pool_storage[:, :HV]
++        A_log = torch.randn(HV, dtype=torch.float32) * 0.1
++        dt_bias = torch.randn(HV, dtype=torch.float32) * 0.1
++
++        for batch_size in (24, 16, 4, 2, 1):
++            packed_qkv = torch.randn(
++                batch_size,
++                (2 * H + HV) * K,
++                dtype=torch.bfloat16,
++            )
++            q_end = H * K
++            k_end = 2 * q_end
++            q = packed_qkv[:, :q_end].view(batch_size, T, H, K)
++            k = packed_qkv[:, q_end:k_end].view(batch_size, T, H, K)
++            v = packed_qkv[:, k_end:].view(batch_size, T, HV, V)
++            packed_ba = torch.randn(batch_size, T, 2 * HV, dtype=torch.bfloat16)
++            # Back both batch-scoped tensors with one extra guard row. If a
++            # cubin compiled for a larger B is accidentally reused, the extra
++            # CTA remains inside an allocated tensor instead of faulting, and
++            # these guards make the silent overwrite deterministic.
++            guard_slot = pool_size - 1
++            indices_storage = torch.full(
++                (batch_size + 1,), guard_slot, dtype=torch.int32
++            )
++            indices_storage[:batch_size] = (
++                torch.arange(batch_size, dtype=torch.int32) % guard_slot
++            )
++            indices = indices_storage[:batch_size]
++            output_guard = torch.tensor(42.0, dtype=torch.bfloat16)
++            output_storage = torch.full(
++                (batch_size + 1, T, HV, V),
++                output_guard,
++                dtype=torch.bfloat16,
++            )
++            output = output_storage[:batch_size]
++            guarded_pool_state = pool[guard_slot].clone()
++
++            kwargs = {
++                "A_log": A_log,
++                "a": packed_ba[..., HV:],
++                "dt_bias": dt_bias,
++                "q": q,
++                "k": k,
++                "v": v,
++                "b": packed_ba[..., :HV],
++                "initial_state_source": pool,
++                "initial_state_indices": indices,
++                "output": output,
++            }
++
++            # Compile first, then capture and replay the same call. Serving
++            # follows this pattern for every bucket in its descending graph
++            # ladder; the original failure surfaced on the final B=1 capture.
++            output = gated_delta_rule(**kwargs)
++            graph = torch.cuda.CUDAGraph()
++            with torch.cuda.graph(graph):
++                output = gated_delta_rule(**kwargs)
++            graph.replay()
++            torch.cuda.synchronize()
++            assert torch.isfinite(output).all()
++            torch.testing.assert_close(
++                output_storage[batch_size:],
++                torch.full_like(output_storage[batch_size:], output_guard),
++                atol=0.0,
++                rtol=0.0,
++            )
++            torch.testing.assert_close(
++                pool[guard_slot], guarded_pool_state, atol=0.0, rtol=0.0
++            )
++
++    torch.cuda.synchronize()
++
++    # B=24/16 use the T=1 wide-vector path; B=4/1 use its ILP4 fallback.
++    # Both caches must contain distinct entries for every T=1 batch bucket.
++    wide_batches = {
++        key[1]
++        for key in _compiled_kernels_wide_vec
++        if key[0] == "v3_mtp_bf16_tiled_dynB"
++        and key[2] == T
++        and key[3] == H
++        and key[4] == HV
++    }
++    fallback_batches = {
++        key[1]
++        for key in _compiled_kernels_mtp
++        if key[0] == "mtp_bf16_dynB" and key[2] == T and key[3] == H and key[4] == HV
++    }
++    assert {24, 16} <= wide_batches
++    assert {4, 2, 1} <= fallback_batches
+-- 
+2.43.0
+
