@@ -1,0 +1,54 @@
+#!/bin/bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-License-Identifier: Apache-2.0
+
+set -Eeuo pipefail
+
+unset PYTHONHOME PYTHONPATH
+export VIRTUAL_ENV=/opt/trtllm5-handoff/venv
+export PATH="${VIRTUAL_ENV}/bin:${PATH}"
+export PYTHONNOUSERSITE=1
+
+local_rank="${SLURM_LOCALID:-0}"
+rank="${SLURM_PROCID:-${OMPI_COMM_WORLD_RANK:-0}}"
+job_id="${SLURM_JOB_ID:-local}"
+cache_root="/tmp/oak-nvfp4-${job_id}-${rank}"
+
+if [[ "${local_rank}" == "0" && -x /work/setup/host_memory_monitor.sh && -d /logs ]]; then
+    output_csv="/logs/host-memory-${HOSTNAME}-rank${rank}.csv"
+    nohup /work/setup/host_memory_monitor.sh "${output_csv}" /logs \
+        > "/logs/host-memory-${HOSTNAME}-rank${rank}.out" 2>&1 < /dev/null &
+    printf '%s\n' "$!" > "/logs/host-memory-${HOSTNAME}-rank${rank}.pid"
+fi
+
+direct_url_file="$(find "${VIRTUAL_ENV}/lib" -path '*/site-packages/tensorrt_llm-*.dist-info/direct_url.json' -print -quit)"
+echo "TRTLLM5_IDENTITY rank=${rank} source=$(readlink -f /opt/trtllm5-dev/tensorrt_llm/__init__.py)"
+if [[ -n "${direct_url_file}" ]]; then
+    echo "TRTLLM5_EDITABLE rank=${rank} metadata=$(tr -d '\n' < "${direct_url_file}")"
+fi
+echo "TRTLLM5_NATIVE rank=${rank} lib=$(readlink -f /opt/trtllm5-dev/tensorrt_llm/libs/libtensorrt_llm.so)"
+
+export XDG_CACHE_HOME="${cache_root}/xdg"
+export CUDA_CACHE_PATH="${cache_root}/cuda"
+export FLASHINFER_WORKSPACE_BASE="${cache_root}/flashinfer-workspace"
+export FLASHINFER_CUBIN_DIR="${cache_root}/flashinfer-cubin"
+export TRITON_CACHE_DIR="${cache_root}/triton"
+export TORCHINDUCTOR_CACHE_DIR="${cache_root}/torchinductor"
+export TORCH_EXTENSIONS_DIR="${cache_root}/torch-extensions"
+export NUMBA_CACHE_DIR="${cache_root}/numba"
+export HF_HOME="${cache_root}/huggingface"
+export HF_MODULES_CACHE="${cache_root}/huggingface/modules"
+
+mkdir -p \
+    "${XDG_CACHE_HOME}" \
+    "${CUDA_CACHE_PATH}" \
+    "${FLASHINFER_WORKSPACE_BASE}" \
+    "${FLASHINFER_CUBIN_DIR}" \
+    "${TRITON_CACHE_DIR}" \
+    "${TORCHINDUCTOR_CACHE_DIR}" \
+    "${TORCH_EXTENSIONS_DIR}" \
+    "${NUMBA_CACHE_DIR}" \
+    "${HF_HOME}" \
+    "${HF_MODULES_CACHE}"
+
+exec /opt/trtllm5-handoff/venv/bin/trtllm-llmapi-launch "$@"

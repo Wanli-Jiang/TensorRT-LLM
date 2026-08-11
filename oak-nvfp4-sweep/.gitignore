@@ -5,3 +5,5 @@
 /logs/*
 !/logs/README.md
 /venv/
+*.md
+/experiments/
