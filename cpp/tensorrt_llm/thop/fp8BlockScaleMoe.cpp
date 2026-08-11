@@ -201,8 +201,8 @@ at::Tensor run_fp8_block_scale_moe(at::optional<at::Tensor> const& routing_logit
     // least 128 KiB of backing memory when the descriptor's addressable extent is at least
     // 128 KiB, even when every logical access is in bounds. A gated activation is half as wide as
     // gemm1_output, so reusing max_num_padded_tokens_gemm1 can leave its backing allocation below
-    // that contract (64 KiB for Oak's tiny decode batches). Compute the capacity from its own row
-    // width instead; this also grows Oak's associated FP32 scale allocation from 2 KiB to the
+    // that contract (64 KiB for narrow decode batches). Compute the capacity from its own row
+    // width instead; this also grows the associated FP32 scale allocation from 2 KiB to the
     // required 4 KiB minimum.
     int32_t max_num_padded_tokens_activation
         = tensorrt_llm::kernels::trtllmGenFp8BlockScaleMoe::Routing::maybeGetMinTokenCount(
