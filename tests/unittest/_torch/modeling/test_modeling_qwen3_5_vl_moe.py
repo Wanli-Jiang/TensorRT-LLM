@@ -17,9 +17,13 @@ from utils.util import skip_pre_hopper
 from tensorrt_llm._torch.model_config import ModelConfig
 from tensorrt_llm._torch.models import Qwen3_5MoeVLModel
 from tensorrt_llm._torch.models.checkpoints.auto_mapper import AutoCheckpointMapper
+from tensorrt_llm._torch.models.checkpoints.base_weight_loader import ConsumableWeightsDict
 from tensorrt_llm._torch.models.checkpoints.hf.qwen3_5_weight_mapper import Qwen3_5MoeHfWeightMapper
 from tensorrt_llm._torch.models.modeling_auto import AutoModelForCausalLM
-from tensorrt_llm._torch.models.modeling_qwen3_5 import _normalize_qwen35_moe_vl_config
+from tensorrt_llm._torch.models.modeling_qwen3_5 import (
+    _filter_language_model_weights,
+    _normalize_qwen35_moe_vl_config,
+)
 from tensorrt_llm._torch.pyexecutor.config_utils import (
     extract_mamba_kv_cache_params,
     load_pretrained_config,
@@ -154,6 +158,23 @@ def test_qwen35_moe_vl_resolves_model_and_mapper(tmp_path: Path) -> None:
         AutoCheckpointMapper.get("HF", "Qwen3_5MoeForConditionalGeneration"),
         Qwen3_5MoeHfWeightMapper,
     )
+
+
+def test_qwen35_vl_filter_preserves_consumable_weights() -> None:
+    language_weight = torch.tensor([1.0])
+    weights = ConsumableWeightsDict(
+        {
+            "model.language_model.layers.0.weight": language_weight,
+            "model.visual.patch_embed.weight": torch.tensor([2.0]),
+        }
+    )
+
+    filtered_weights = _filter_language_model_weights(weights)
+
+    assert isinstance(filtered_weights, ConsumableWeightsDict)
+    assert len(weights) == 0
+    assert len(filtered_weights) == 1
+    assert filtered_weights["model.language_model.layers.0.weight"] is language_weight
 
 
 def test_qwen35_moe_vl_placeholder_metadata_registered() -> None:

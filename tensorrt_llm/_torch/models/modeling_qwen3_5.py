@@ -32,6 +32,7 @@ from ...inputs import (
     support_multimodal_disaggregated,
 )
 from ..pyexecutor.config_utils import get_qwen3_hybrid_layer_types
+from .checkpoints.base_weight_loader import ConsumableWeightsDict
 from .checkpoints.base_weight_mapper import BaseWeightMapper
 from .checkpoints.hf.qwen3_5_weight_mapper import Qwen3_5MoeHfWeightMapper
 from .modeling_qwen3_next import Qwen3NextForCausalLM
@@ -52,6 +53,22 @@ _MTP_TOP_TO_TRTLLM = {
     "pre_fc_norm_embedding": "pre_fc_norm_embedding",
     "pre_fc_norm_hidden": "pre_fc_norm_hidden",
 }
+
+
+def _filter_language_model_weights(weights: Dict[str, torch.Tensor]):
+    """Drop vision weights without disabling incremental weight consumption."""
+    filtered_weights = {
+        key: value
+        for key, value in weights.items()
+        if not key.startswith("model.visual.")
+    }
+    if isinstance(weights, ConsumableWeightsDict):
+        # The filtered mapping aliases the source tensors. Transfer ownership
+        # to a fresh consumable wrapper so the inner loader can release routed
+        # experts layer by layer instead of pinning the whole checkpoint.
+        weights.clear()
+        return ConsumableWeightsDict(filtered_weights)
+    return filtered_weights
 
 
 def _translate_mtp_pattern(name, n_hidden_layers):
@@ -721,7 +738,7 @@ class _Qwen3_5VLModel(Qwen3VLModelBase):
             )
         if weight_mapper.model is not self.llm:
             weight_mapper.init_model_and_config(self.llm, self.llm.model_config)
-        filtered_weights = {k: v for k, v in weights.items() if not k.startswith("model.visual.")}
+        filtered_weights = _filter_language_model_weights(weights)
         params_map = {
             r"^model\.language_model\.(.*)$": r"model.\1",
         }
