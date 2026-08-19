@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "package": "trtllm-pr17537-oakhaven-fp8-ht4k-fix-delivery-20260817",
+  "generated_at": "2026-08-17T22:09:42-07:00",
+  "documentation_updated_at": "2026-08-19T01:04:37-07:00",
+  "timezone": "America/Los_Angeles",
+  "scope": "FP8 Oakhaven-Max TP32/EP32/ADP32/PP1 DeepGEMM Static544 high-throughput source/config delivery",
+  "excludes": [
+    "model weights",
+    "wheel",
+    "Docker archive",
+    "sqsh",
+    "NVFP4"
+  ],
+  "sources": {
+    "delivery_fork": "https://github.com/Wanli-Jiang/TensorRT-LLM",
+    "delivery_branch": "user/williamj/oakhaven-fp8-ht4k-repro-20260819",
+    "tensorrt_llm_pr_url": "https://github.com/NVIDIA/TensorRT-LLM/pull/17537",
+    "tensorrt_llm_required_commit": "9a6889b2a2aba6f6e44483999dd972bc157c297b",
+    "tensorrt_llm_max_num_tokens_fix_commit": "f572594361",
+    "gdn_replay_commits": [
+      "ee241d25f43973ad52495119d6536176b91c0aec",
+      "57f2781e4e9f679cfa429400b64e447fbefa253e",
+      "d8d10ab3540c4341852075a45b6b35bcfa0a23cf"
+    ],
+    "gdn_replay_evidence_scope": {
+      "functional_replay": "ee241d25f43973ad52495119d6536176b91c0aec",
+      "tested_v2_support": "57f2781e4e9f679cfa429400b64e447fbefa253e",
+      "exact_pr_provenance_peak_ht_benefit_unproven": "d8d10ab3540c4341852075a45b6b35bcfa0a23cf"
+    },
+    "flashinfer_fix_commit_optional_for_ht4k": "baad0dca27d165341d188b895f3ab161e8098344",
+    "flashinfer_bad_gdn_sha256": "61de9ffa703962cb1ddb73823100550138708bbcbb535a3efcac608940e67e61",
+    "flashinfer_fixed_gdn_sha256": "4982b5a9d20d9b18588020ab3e938238c9692ffab6265c3533f4b7cf8309a8fe"
+  },
+  "retained_performance": {
+    "metric": "total input+output tok/s/GPU",
+    "hardware": "32x GB300",
+    "workload": "ISL8192/OSL1024/RR1.0/request-rate-inf",
+    "mtp3_c1536_values": [
+      4114.062,
+      4110.993,
+      4112.35,
+      4065.823
+    ],
+    "mtp3_c1536_mean": 4100.807,
+    "mtp3_population_cv_percent": 0.493,
+    "nomtp_c3264": 4055.616,
+    "latest_same_allocation_dynamic_static_dynamic_c1536": [
+      4049.545,
+      4064.498,
+      4096.202
+    ],
+    "warmup_requests": "1 x concurrency",
+    "formal_requests": "3 x concurrency"
+  },
+  "packaging_validation": {
+    "trtllm_patch_apply_check": "pass against clean git archive at required commit",
+    "flashinfer_patch_apply_check": "pass against 0.6.16 source; output byte-identical to retained fixed module",
+    "python_compile": "pass",
+    "script_syntax": "pass",
+    "recipe_render_and_yaml": "pass",
+    "tensor_rt_llm_unit_tests": "retained QA image passed 119 tests with 4 expected xfails; current documentation host lacks pytest; focused target-build rerun remains required"
+  },
+  "files": [
+    {
+      "path": "ACCEPTANCE_CHECKLIST.md",
+      "size_bytes": 4682,
+      "sha256": "d884b27ad9b773562c3e4dcc8d3825b8958053e03ddc6fe1ce8d3ba6e032b395"
+    },
+    {
+      "path": "BUILD_AND_PORTING.md",
+      "size_bytes": 5286,
+      "sha256": "dd350bcc833a457acf1820191ca9a08e2d27a31c03283aaa024d0c90d2904d57"
+    },
+    {
+      "path": "LICENSES/FlashInfer-LICENSE",
+      "size_bytes": 12384,
+      "sha256": "d76ef6f903c7545978e93f91d8a4c7c7574c3f9e80fc5bfba7412f60ad730184"
+    },
+    {
+      "path": "LICENSES/TensorRT-LLM-LICENSE",
+      "size_bytes": 40349,
+      "sha256": "4fab2db8e634ec435a39aa264d0a1171be52d8dd128cda57fb3c50747a969627"
+    },
+    {
+      "path": "PROMPT.md",
+      "size_bytes": 8191,
+      "sha256": "f31c2d51ec62f5aa14f9f7810fb63124c8e5a04f71f3f9856f19bccf9c89e630"
+    },
+    {
+      "path": "README.md",
+      "size_bytes": 10574,
+      "sha256": "0b17673c3f34cf3917529fe1fb8932c949b06c7a83eea0d5b0ff44720624dd87"
+    },
+    {
+      "path": "SOURCE_PROVENANCE.md",
+      "size_bytes": 4250,
+      "sha256": "e05a578a26f5fd72c4653b8f3c40f82d5fa80a09ec8e343cea0594a896b42b2c"
+    },
+    {
+      "path": "TECHNICAL_CLARIFICATION.md",
+      "size_bytes": 9892,
+      "sha256": "c89d9326debc6722eb7092225651bb28ab9c6aef1843ebac371e78aa2995b482"
+    },
+    {
+      "path": "VALIDATION_20260819.md",
+      "size_bytes": 1843,
+      "sha256": "415e94d1e1abac3807cf8b9dcb3c9238b62791317731375f115f9b67b2907ff3"
+    },
+    {
+      "path": "configs/eplb/mtp3-static544-mean-job414038.yaml",
+      "size_bytes": 394410,
+      "sha256": "ce92f6484658759845cc104e8338c15b2a62fe95719e04b2b02ae5880f71e50a"
+    },
+    {
+      "path": "configs/eplb/nomtp-static544-job411225.yaml",
+      "size_bytes": 240107,
+      "sha256": "c4e7c0d57311629e32999c7b4f1f43144328134f15059c7f01ba7b03d7ddd68f"
+    },
+    {
+      "path": "configs/mtp3-c1536-m48-kvcap479232.yaml.in",
+      "size_bytes": 3678,
+      "sha256": "fd94f80e28310da06e2d2980ef1b238e85314bf6dfd979d763a94cb030b25e75"
+    },
+    {
+      "path": "configs/nomtp-c3264-m104.yaml.in",
+      "size_bytes": 3483,
+      "sha256": "463c7d283e4cd4583c3faa3f789bd84171b5e7d2bbfc855350927e64f432f829"
+    },
+    {
+      "path": "evidence/final-fix-causal-decomposition-20260816.json",
+      "size_bytes": 37191,
+      "sha256": "b5c92a6aa21b033087e87404c0262b128be55940fc75989d18e5c4defb4433b4"
+    },
+    {
+      "path": "evidence/final-fix-maximum-throughput-root-cause-20260816.md",
+      "size_bytes": 22717,
+      "sha256": "f76a4aa6017140be45f5d7320451a82d46bf828cbbb5277816e2d0915efca8c7"
+    },
+    {
+      "path": "evidence/final-fix-maximum-throughput-root-cause-zh-20260816.md",
+      "size_bytes": 33502,
+      "sha256": "99fc331777208fa8bb265f256908e30e5361cff01019627c2624b999d5112d66"
+    },
+    {
+      "path": "evidence/nomtp-mtp3-full-curve.csv",
+      "size_bytes": 49657,
+      "sha256": "4f79cfd9a21cba9339a3bbed15847485f1f0452371aee0034b4db62406692113"
+    },
+    {
+      "path": "evidence/nomtp-mtp3-full-curve.json",
+      "size_bytes": 77831,
+      "sha256": "7fd0cf427a672b0ddb5cc4c869e5b57fed98d09d62a6f34fce34368694375643"
+    },
+    {
+      "path": "patches/flashinfer-baad0dca-full-commit-reference.patch",
+      "size_bytes": 16590,
+      "sha256": "dbbe9199b7bc037c839afbdb725dfe6e89bddf85b76bada7482d56a0b9f5b1fe"
+    },
+    {
+      "path": "patches/flashinfer-gdn-t1-static-cache-vs-0.6.16-0.6.17.patch",
+      "size_bytes": 10697,
+      "sha256": "d92f7bd5a66c6872a53d8702e4f1ee9446db5068790f3bdb3f947df15e1466b0"
+    },
+    {
+      "path": "patches/trtllm-pr17537-max-num-tokens-propagation.patch",
+      "size_bytes": 4632,
+      "sha256": "6bdb6b98ee3b76546fff6b4167424690fc3f0b93d2769f4e8078933db1a789f0"
+    },
+    {
+      "path": "reference/flashinfer/gdn_decode_bf16_state.fixed.py",
+      "size_bytes": 181153,
+      "sha256": "4982b5a9d20d9b18588020ab3e938238c9692ffab6265c3533f4b7cf8309a8fe"
+    },
+    {
+      "path": "scripts/apply_source_fixes.sh",
+      "size_bytes": 4133,
+      "sha256": "93d779bd059ed07ce53db5a14aa87ba53996e9cc4fd0537f38cd588917d0906f"
+    },
+    {
+      "path": "scripts/audit_formal_measurement_windows_corrected.py",
+      "size_bytes": 9642,
+      "sha256": "32b92e2a46d06a757ae5467b9b3272dab297724777a44970f9ec12cc8250c579"
+    },
+    {
+      "path": "scripts/bench_flashinfer_gdn_t1_exact_shape.py",
+      "size_bytes": 6603,
+      "sha256": "56500845d0cbdf23ca646c46a0fd744ee9dc3aa1e9e85632a9e9149f7b65d42f"
+    },
+    {
+      "path": "scripts/render_recipe.py",
+      "size_bytes": 1662,
+      "sha256": "4dfe5faf700ce70a580565ff979b29e524a2db986e6c2e3b2dc42b1852faa12b"
+    },
+    {
+      "path": "scripts/update_manifest.py",
+      "size_bytes": 1788,
+      "sha256": "d13907ef7de24754636803ffd76bcc53bd4513b396068d1ff6ef08a3336814b0"
+    },
+    {
+      "path": "scripts/verify_bundle.sh",
+      "size_bytes": 356,
+      "sha256": "12f91df2425c63e34f65649037dedc0c0370cf98d289e3b07216cfbfa45bf145"
+    },
+    {
+      "path": "scripts/verify_source_fixes.sh",
+      "size_bytes": 2921,
+      "sha256": "1c97312c362a45bae85cc5f78aafdef539051eee9db7ce17adbb78673f06c131"
+    }
+  ]
+}

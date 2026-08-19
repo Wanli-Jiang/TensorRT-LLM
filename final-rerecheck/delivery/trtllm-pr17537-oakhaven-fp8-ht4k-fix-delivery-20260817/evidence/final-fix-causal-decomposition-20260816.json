@@ -1,0 +1,850 @@
+{
+  "causal_conclusion": {
+    "do_not_sum_percentages": true,
+    "root_cause": "Two independent bugs interacted with serving geometry: a T=1 GDN compile-cache specialization bug reduced every decode cycle, and legacy MTP state materialization made the resident batch required by C1536 infeasible. Cached replay repairs the state lifecycle, no-chunk accelerates the initial prefill ramp, while an explicit absolute KV cap preserves transient Split-K headroom without falling below 48 sequences/rank.",
+    "why": "The controls change interacting bottlenecks and operate at different layers; their percentages are not an additive attribution model."
+  },
+  "gdn_cached_replay": {
+    "important_scope": "Replay is proven to enable capacity. It is not claimed as a same-M36 kernel-latency win.",
+    "legacy_formula_recomputed_bytes": 120393302016,
+    "legacy_intermediate_ssm_gib": 112.125,
+    "legacy_m104_runtime_oom_allocation_gib": 112.12,
+    "legacy_m48_no_replay_contextual_group": {
+      "count": 2,
+      "labels": [
+        "legacy_m48_no_replay_488761",
+        "legacy_m48_no_replay_488762"
+      ],
+      "mean_duration_s": 498.3523526219651,
+      "mean_median_tpot_ms": 43.142071523197686,
+      "mean_median_ttft_ms": 113934.19268399884,
+      "mean_peak_aggregate_output_tps": 27202.050000000003,
+      "mean_total_tps_per_gpu": 2662.99815474752,
+      "population_cv_percent": 0.23606331801006483,
+      "range_percent_of_mean": 0.47212663602012966,
+      "total_tps_per_gpu": [
+        2656.7117929448764,
+        2669.284516550164
+      ]
+    },
+    "legacy_m48_scope": "These two formally valid runs show that increasing slots alone did not fix the legacy state path. They are contextual rather than a matched replay A/B because V1 and memory settings also differ from the final stack.",
+    "legacy_total_verify_scratch_gib": 115.409912109375,
+    "replay_m104_group": {
+      "count": 2,
+      "labels": [
+        "m104_replay_off_lowm_488899",
+        "m104_replay_off_lowm_repeat_488993"
+      ],
+      "mean_duration_s": 322.6979749755119,
+      "mean_median_tpot_ms": 95.9785257808015,
+      "mean_median_ttft_ms": 7788.561031236895,
+      "mean_peak_aggregate_output_tps": 57385.899999999994,
+      "mean_total_tps_per_gpu": 4112.527154507648,
+      "population_cv_percent": 0.03731542520782259,
+      "range_percent_of_mean": 0.07463085041564518,
+      "total_tps_per_gpu": [
+        4114.06176150214,
+        4110.992547513157
+      ]
+    },
+    "replay_m104_vs_static_m36_group": {
+      "duration_s_change_percent": -2.3979260438741212,
+      "median_tpot_ms_change_percent": 37.303071235565845,
+      "median_ttft_ms_change_percent": -76.38959162208143,
+      "peak_aggregate_output_tps_change_percent": 45.836785313117836,
+      "total_tps_per_gpu_change_percent": 2.4554061429588714
+    },
+    "replay_total_verify_scratch_gib": 11.3876953125,
+    "resource_audit_source": "audits/ht4000/gdn-replay-resource-audit.json",
+    "resource_audit_source_sha256": "ceeeb5bda611947852a8b9a7f8be3f517c3a520247367dbaeaf03a6f6781d1c1",
+    "saved_gib": 104.022216796875,
+    "total_verify_scratch_reduction_percent": 90.13282732447819
+  },
+  "gdn_t1_cache_fix": {
+    "bit_exact_output_and_state": true,
+    "e2e_static_467197_vs_dynamic_466450": {
+      "duration_s_change_percent": -6.070194099547699,
+      "median_tpot_ms_change_percent": -5.630865017303233,
+      "median_ttft_ms_change_percent": -6.178289436746032,
+      "peak_aggregate_output_tps_change_percent": -1.1316623277027649,
+      "total_tps_per_gpu_change_percent": 6.462479126147613
+    },
+    "exact_shape_cuda_graph_speedup_percent": 8.005495115411577,
+    "exact_shape_eager_speedup_percent": 8.446000722668167,
+    "immutable_repeat_cuda_graph_ratio": 1.0000861964280259,
+    "immutable_repeat_source": "outputs/ht4000/gdn-t1-immutable-exact-shape/467826/comparison.json",
+    "immutable_repeat_source_sha256": "f04519038579eab94e66b1550ecd21107e0af1fdb410e6242501ea3cefe3d4de",
+    "microbench_source": "outputs/ht4000/gdn-t1-exact-shape-microbench/467068/comparison.json",
+    "microbench_source_sha256": "1736f5fe68038bf07bff5b6c3cec43e4cc9253798899dc6e1c212e4db09cdd1c",
+    "static_repeat_group": {
+      "count": 2,
+      "labels": [
+        "static_gdn_m36_467197",
+        "static_gdn_m36_repeat_467781"
+      ],
+      "mean_duration_s": 330.6261454245032,
+      "mean_median_tpot_ms": 69.90267946456541,
+      "mean_median_ttft_ms": 32987.82853125522,
+      "mean_peak_aggregate_output_tps": 39349.4,
+      "mean_total_tps_per_gpu": 4013.967939153279,
+      "population_cv_percent": 0.37585216707769586,
+      "range_percent_of_mean": 0.7517043341553917,
+      "total_tps_per_gpu": [
+        4029.054524638391,
+        3998.881353668168
+      ]
+    }
+  },
+  "generated_at": "2026-08-16T21:20:59-07:00",
+  "kv_headroom_and_splitk": {
+    "average_9216_token_sequence_capacity": {
+      "kv085": 47.911144234516,
+      "kv088": 52.06239149305556,
+      "kv090": 54.85067731362802
+    },
+    "interpretation": "Split-K is beneficial once transient headroom exists. At M104, KV0.88 happened to supply that headroom; the uncapped M36 failure proves the fraction is not portable across state/batch geometries. A fixed absolute KV token cap is the robust control.",
+    "kv088_minus_kv090_pytorch_allowance_gib": 1.21875,
+    "kv090_minus_kv088_quota_gib": 1.1763080805540085,
+    "kv090_splitk_oom_free_gib": 1.21,
+    "kv090_splitk_oom_transient_mib": 838.0,
+    "kv_quota_gib": {
+      "kv085": 49.619847347959876,
+      "kv088": 51.37115478515625,
+      "kv090": 52.54746286571026
+    },
+    "low_m_cuda_graph_microbench": {
+      "device": "NVIDIA GB300",
+      "execution": "cuda_graph",
+      "flashinfer_preferred_count": 63,
+      "max_abs_error": 0.03125,
+      "median_existing_over_flashinfer_by_n": {
+        "1": 1.0002075405564408,
+        "248320": 1.0341245198797948,
+        "256": 1.3308449784864005,
+        "34816": 1.0418016495618403,
+        "36864": 1.0374502912478694,
+        "4096": 1.1996507453367673,
+        "8192": 1.071799120398566
+      },
+      "pdl": true,
+      "repeats": 100,
+      "shape_count": 72,
+      "source": "outputs/microbench/low-m-graph/job-489183/results.json",
+      "source_sha256": "7eeaafb51050a4974aebfecfb9967b9a26ffd2f5c677d3544466b5fbf8b6fe58",
+      "trials": 7
+    },
+    "splitk_auto_vs_off_at_matched_kv085": {
+      "duration_s_change_percent": -1.448651634516629,
+      "median_tpot_ms_change_percent": -3.16662604215433,
+      "median_ttft_ms_change_percent": 1.5706319345152986,
+      "peak_aggregate_output_tps_change_percent": -0.08397183159504218,
+      "total_tps_per_gpu_change_percent": 1.469946031731828
+    },
+    "uncapped_fraction_m36_failure": {
+      "attention_capacity_status": "derived from matched-M36 capped control",
+      "capped_attention_kv_quota_gib": 23.092105263157897,
+      "capped_attention_kv_resumable_gib": 21.9375,
+      "capped_m36_rank0_pytorch_allowance_gib": 236.45404052734375,
+      "capped_m36_total_device_quota_gib": 34.18921219743788,
+      "deepgemm_gather_finalize_oom_request_mib": 830.0,
+      "derived_m36_fixed_context_resumable_gib": 10.542251587565985,
+      "derived_uncapped_attention_tokens": 1075436.0000030517,
+      "derived_uncapped_average_9216_token_sequences": 116.69227430588668,
+      "final_total_device_quota_gib": 62.9176892740652,
+      "free_at_oom_mib": 236.94,
+      "free_gpu_memory_fraction": 0.88,
+      "interpretation": "A fixed free-memory fraction is allocator feedback, not a fixed headroom budget. Reducing recurrent-state memory let KV consume the freed bytes, so an explicit absolute KV cap is required for a valid residency comparison and robust Split-K execution.",
+      "max_util_for_resume": 0.95,
+      "rank0_pytorch_allowance_gib": 207.7353515625,
+      "rank0_pytorch_allowance_increase_with_cap_gib": 28.71868896484375,
+      "source": "outputs/final-fix-residency-ab-20260816/m36-a/491622/logs/nvl72d080-T01_agg_w0.out",
+      "source_sha256": "ff11e2f3cf7b1a54a6cd1dd3f1facfb542b6e19109a04b248a2f35077d1b71f9",
+      "total_quota_reduction_with_cap_gib": 28.728477076627314
+    }
+  },
+  "no_chunk_prefill": {
+    "fixed_except_for": "max_num_tokens 1024/chunked versus 8512/no-chunk, plus isolated cache names",
+    "interpretation": "Both no-chunk arms improve ramp/aggregate output; this setting is helpful but did not independently make M36 stable above 4k.",
+    "nochunk_b1_vs_chunked": {
+      "duration_s_change_percent": -8.679524637201585,
+      "median_tpot_ms_change_percent": 1.3452280977254594,
+      "median_ttft_ms_change_percent": -25.098903234272708,
+      "peak_aggregate_output_tps_change_percent": 20.86996235327363,
+      "total_tps_per_gpu_change_percent": 9.504467210359469
+    },
+    "nochunk_b2_vs_chunked": {
+      "duration_s_change_percent": -4.046696363862257,
+      "median_tpot_ms_change_percent": 5.4382597018649115,
+      "median_ttft_ms_change_percent": -16.279231429203577,
+      "peak_aggregate_output_tps_change_percent": 21.177292867307894,
+      "total_tps_per_gpu_change_percent": 4.21736012259426
+    },
+    "same_allocation_job": 488694
+  },
+  "raw_result_summaries": {
+    "chunked_highbudget_488694": {
+      "completed": 3072,
+      "duration_s": 249.08051300799707,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "chunked_highbudget_488694",
+      "median_e2el_ms": 107882.67937948694,
+      "median_tpot_ms": 73.43904616960752,
+      "median_ttft_ms": 35308.316532027675,
+      "output_tps_per_gpu": 394.6675667752612,
+      "p99_tpot_ms": 86.40288984034991,
+      "p99_ttft_ms": 120296.14351684049,
+      "peak_aggregate_output_tps": 39631.600000000006,
+      "source": "outputs/mtp3-nochunk-factorial-20260816/a-chunked-highbudget/488694/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "3456c0d5ded938b83e64b06ba70d985a65280555967b0c40d6a7c68d1ff5f29f",
+      "total_tokens": 28311552,
+      "total_tps_per_gpu": 3552.0081009773508,
+      "ttft_empirical_ms": {
+        "p10": 30.86713842214085,
+        "p25": 33.37873795849737,
+        "p50": 35.308316532027675,
+        "p75": 64.12925166700734,
+        "p90": 99.12532289512455,
+        "p99": 120.29614351684049
+      }
+    },
+    "dynamic_gdn_m36_466450": {
+      "completed": 4608,
+      "duration_s": 350.66981852499885,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "dynamic_gdn_m36_466450",
+      "median_e2el_ms": 110208.95895550348,
+      "median_tpot_ms": 73.71302079031979,
+      "median_ttft_ms": 34886.33572549588,
+      "output_tps_per_gpu": 420.49812162402577,
+      "p99_tpot_ms": 78.09870001679025,
+      "p99_ttft_ms": 105711.04104686601,
+      "peak_aggregate_output_tps": 39640.8,
+      "source": "outputs/ht4000/current-m36-d023/466450/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "9a84c55090b10c9654094885663eb764fd5f2c91dbf5e5af847958b96eb3beb8",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 3784.4830946162315,
+      "ttft_empirical_ms": {
+        "p10": 30.639341201793286,
+        "p25": 33.90483014149504,
+        "p50": 34.88633572549588,
+        "p75": 38.34579750174453,
+        "p90": 74.67024672800181,
+        "p99": 105.71104104686601
+      }
+    },
+    "legacy_m48_no_replay_488761": {
+      "completed": 4608,
+      "duration_s": 499.52877972094575,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "legacy_m48_no_replay_488761",
+      "median_e2el_ms": 156686.92924149218,
+      "median_tpot_ms": 43.347097222851666,
+      "median_ttft_ms": 114240.6139030063,
+      "output_tps_per_gpu": 295.19019921609737,
+      "p99_tpot_ms": 50.568201728731296,
+      "p99_ttft_ms": 144628.69015238772,
+      "peak_aggregate_output_tps": 26910.4,
+      "source": "outputs/mtp3-m48-nochunk-20260816/frontier/488761/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "fba2755e84cebf9fc543809fe5c672182f89a23beffec00a646e5f5e28e7b4b2",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 2656.7117929448764,
+      "ttft_empirical_ms": {
+        "p10": 45.66895986000891,
+        "p25": 102.39700668251317,
+        "p50": 114.2406139030063,
+        "p75": 128.43081139223068,
+        "p90": 135.31069065820193,
+        "p99": 144.62869015238772
+      }
+    },
+    "legacy_m48_no_replay_488762": {
+      "completed": 4608,
+      "duration_s": 497.17592552298447,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "legacy_m48_no_replay_488762",
+      "median_e2el_ms": 155991.06153749744,
+      "median_tpot_ms": 42.937045823543706,
+      "median_ttft_ms": 113627.77146499138,
+      "output_tps_per_gpu": 296.5871685055738,
+      "p99_tpot_ms": 50.455728059403896,
+      "p99_ttft_ms": 144171.1094511149,
+      "peak_aggregate_output_tps": 27493.700000000004,
+      "source": "outputs/mtp3-m48-nochunk-20260816/frontier/488762/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "7cc75ee33f3c3db8bcfdb85c25fc2e315e96db0c95b395add55ddc75eecb7515",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 2669.284516550164,
+      "ttft_empirical_ms": {
+        "p10": 45.99900102469255,
+        "p25": 102.12867151574756,
+        "p50": 113.62777146499138,
+        "p75": 127.58237541222479,
+        "p90": 134.5553954365896,
+        "p99": 144.1711094511149
+      }
+    },
+    "m104_replay_auto_kv085_489081": {
+      "completed": 4608,
+      "duration_s": 333.895987203985,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "m104_replay_auto_kv085_489081",
+      "median_e2el_ms": 103453.84641151759,
+      "median_tpot_ms": 87.72723297504886,
+      "median_ttft_ms": 14358.328490023268,
+      "output_tps_per_gpu": 441.62255807499605,
+      "p99_tpot_ms": 104.83275841708196,
+      "p99_ttft_ms": 78081.84179596894,
+      "peak_aggregate_output_tps": 55448.2,
+      "source": "outputs/mtp3-v2-m104-replay-splitk-headroom-20260816/kv085-c1536/489081/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "db2ba0f8fd9f27329a51d2fb26621e0c79949ad515dd0b5341ce3e960349b8da",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 3974.6030226749644,
+      "ttft_empirical_ms": {
+        "p10": 9.648409044696017,
+        "p25": 11.944034094252856,
+        "p50": 14.358328490023268,
+        "p75": 26.641650528254104,
+        "p90": 58.71254402690684,
+        "p99": 78.08184179596894
+      }
+    },
+    "m104_replay_auto_kv088_489192": {
+      "completed": 4608,
+      "duration_s": 322.71181573998183,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "m104_replay_auto_kv088_489192",
+      "median_e2el_ms": 107709.22219549539,
+      "median_tpot_ms": 95.84025669696614,
+      "median_ttft_ms": 8209.530703519704,
+      "output_tps_per_gpu": 456.92779999976676,
+      "p99_tpot_ms": 105.42270786472152,
+      "p99_ttft_ms": 80401.40861072054,
+      "peak_aggregate_output_tps": 57350.20000000001,
+      "source": "outputs/mtp3-v2-m104-replay-splitk-headroom-20260816/kv088-c1536/489192/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "1c448dd52d35f7e54f423fe7f86e5ca75e0e1be56a3b4f4997f3911a3fe4de96",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 4112.350199997901,
+      "ttft_empirical_ms": {
+        "p10": 4.627333982195705,
+        "p25": 6.364181757744518,
+        "p50": 8.209530703519704,
+        "p75": 22.68878911275533,
+        "p90": 59.24084400100401,
+        "p99": 80.40140861072054
+      }
+    },
+    "m104_replay_auto_kv088_curve_489281": {
+      "completed": 4608,
+      "duration_s": 326.4048014860018,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "m104_replay_auto_kv088_curve_489281",
+      "median_e2el_ms": 109147.73862599395,
+      "median_tpot_ms": 97.19603149316961,
+      "median_ttft_ms": 7915.935223485576,
+      "output_tps_per_gpu": 451.75806032474617,
+      "p99_tpot_ms": 107.60837200119704,
+      "p99_ttft_ms": 81239.18413265725,
+      "peak_aggregate_output_tps": 57535.100000000006,
+      "source": "outputs/mtp3-v2-m104-replay-splitk-curve-20260816/mid/489281/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "94cb4f1e3f850201bf48f661433be8c6c1f9530ec622b157f4b158311403cfad",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 4065.8225429227155,
+      "ttft_empirical_ms": {
+        "p10": 4.720350014785072,
+        "p25": 6.168791781514301,
+        "p50": 7.915935223485576,
+        "p75": 23.038582016000873,
+        "p90": 58.095209279813574,
+        "p99": 81.23918413265724
+      }
+    },
+    "m104_replay_lowm_off_kv085_489194": {
+      "completed": 4608,
+      "duration_s": 338.80407801800175,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "m104_replay_lowm_off_kv085_489194",
+      "median_e2el_ms": 107015.10876399698,
+      "median_tpot_ms": 90.59607177711172,
+      "median_ttft_ms": 14136.29925949499,
+      "output_tps_per_gpu": 435.2249856690485,
+      "p99_tpot_ms": 107.57143644716206,
+      "p99_ttft_ms": 79108.52825183596,
+      "peak_aggregate_output_tps": 55494.8,
+      "source": "outputs/mtp3-v2-m104-replay-splitk-headroom-20260816/kv085-lowm-off-c1536/489194/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "61632fd85533fdfaed25bbe4be050e5ae4395a7cf500d08040bf1d52d94d0084",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 3917.0248710214364,
+      "ttft_empirical_ms": {
+        "p10": 9.506196983286646,
+        "p25": 11.40564526700473,
+        "p50": 14.13629925949499,
+        "p75": 26.69743206977728,
+        "p90": 58.29454676249879,
+        "p99": 79.10852825183596
+      }
+    },
+    "m104_replay_off_lowm_488899": {
+      "completed": 4608,
+      "duration_s": 322.57755885401275,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "m104_replay_off_lowm_488899",
+      "median_e2el_ms": 106641.27976750024,
+      "median_tpot_ms": 96.02427065444387,
+      "median_ttft_ms": 7658.684968977468,
+      "output_tps_per_gpu": 457.1179735002378,
+      "p99_tpot_ms": 106.35338790863646,
+      "p99_ttft_ms": 81554.49620542408,
+      "peak_aggregate_output_tps": 57441.2,
+      "source": "outputs/mtp3-v2-m104-replay-20260816/c1536/488899/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "d31026cc04771ee1ce0f49d3a4549dedd2657633f7b151afcb06f0ab0be8a71a",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 4114.06176150214,
+      "ttft_empirical_ms": {
+        "p10": 4.622141029761406,
+        "p25": 6.162653923485777,
+        "p50": 7.658684968977468,
+        "p75": 22.750826406496344,
+        "p90": 58.021563414792766,
+        "p99": 81.55449620542407
+      }
+    },
+    "m104_replay_off_lowm_repeat_488993": {
+      "completed": 4608,
+      "duration_s": 322.81839109701104,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "m104_replay_off_lowm_repeat_488993",
+      "median_e2el_ms": 106613.23136999272,
+      "median_tpot_ms": 95.93278090715913,
+      "median_ttft_ms": 7918.437093496323,
+      "output_tps_per_gpu": 456.7769497236841,
+      "p99_tpot_ms": 105.79341437573156,
+      "p99_ttft_ms": 81238.15171661263,
+      "peak_aggregate_output_tps": 57330.6,
+      "source": "outputs/mtp3-v2-m104-replay-20260816/c1536/488993/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "f4844cff4fd78ef93dcf936aefce66f0dec45994e91aed4a580cf4ac388f12ee",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 4110.992547513157,
+      "ttft_empirical_ms": {
+        "p10": 4.748869839502731,
+        "p25": 6.300634592247661,
+        "p50": 7.918437093496323,
+        "p75": 22.427853883287753,
+        "p90": 57.366767368896404,
+        "p99": 81.23815171661263
+      }
+    },
+    "nochunk_highbudget_b1_488694": {
+      "completed": 3072,
+      "duration_s": 227.46150851499988,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "nochunk_highbudget_b1_488694",
+      "median_e2el_ms": 100277.87709451513,
+      "median_tpot_ms": 74.42696885338266,
+      "median_ttft_ms": 26446.316332003335,
+      "output_tps_per_gpu": 432.1786162493395,
+      "p99_tpot_ms": 88.59789539650698,
+      "p99_ttft_ms": 106601.09679767687,
+      "peak_aggregate_output_tps": 47902.7,
+      "source": "outputs/mtp3-nochunk-factorial-20260816/b1-nochunk/488694/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "abef1ce9b88995c1dc09a31a2e1c207c064120d5df57cda6d4a621ebc58d56ed",
+      "total_tokens": 28311552,
+      "total_tps_per_gpu": 3889.6075462440554,
+      "ttft_empirical_ms": {
+        "p10": 19.294757704704537,
+        "p25": 23.279000428738073,
+        "p50": 26.446316332003335,
+        "p75": 47.12815886824683,
+        "p90": 91.47318155728281,
+        "p99": 106.60109679767687
+      }
+    },
+    "nochunk_highbudget_b2_488694": {
+      "completed": 3072,
+      "duration_s": 239.000980945013,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "nochunk_highbudget_b2_488694",
+      "median_e2el_ms": 105795.56653197506,
+      "median_tpot_ms": 77.43285222288326,
+      "median_ttft_ms": 29560.393970023142,
+      "output_tps_per_gpu": 411.3121193532541,
+      "p99_tpot_ms": 88.26812513496155,
+      "p99_ttft_ms": 110899.9407001643,
+      "peak_aggregate_output_tps": 48024.50000000001,
+      "source": "outputs/mtp3-nochunk-factorial-20260816/b2-nochunk/488694/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "639540eabe42a36d17f674db069579b0f05b0a7fe2b1517c446cec4fb94866aa",
+      "total_tokens": 28311552,
+      "total_tps_per_gpu": 3701.809074179287,
+      "ttft_empirical_ms": {
+        "p10": 20.788774690928406,
+        "p25": 24.232174493270577,
+        "p50": 29.560393970023142,
+        "p75": 51.89453527225123,
+        "p90": 92.87917138648335,
+        "p99": 110.8999407001643
+      }
+    },
+    "static_gdn_m36_467197": {
+      "completed": 4608,
+      "duration_s": 329.38347989199974,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "static_gdn_m36_467197",
+      "median_e2el_ms": 103149.93876199878,
+      "median_tpot_ms": 69.56234008944021,
+      "median_ttft_ms": 32730.956930499815,
+      "output_tps_per_gpu": 447.6727249598212,
+      "p99_tpot_ms": 72.42026849823672,
+      "p99_ttft_ms": 101084.00087707225,
+      "peak_aggregate_output_tps": 39192.200000000004,
+      "source": "outputs/ht4000/current-m36-fi-gdn-static-d023/467197/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "8c3239029e1c72aa229c6b3f8dfa0b22e698f3d512fe8771928b780b8e78419f",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 4029.054524638391,
+      "ttft_empirical_ms": {
+        "p10": 28.99933289919572,
+        "p25": 31.78023598150321,
+        "p50": 32.730956930499815,
+        "p75": 33.92213146125141,
+        "p90": 70.61360113270348,
+        "p99": 101.08400087707226
+      }
+    },
+    "static_gdn_m36_repeat_467781": {
+      "completed": 4608,
+      "duration_s": 331.86881095700664,
+      "invariants": {
+        "all_generated_texts_nonempty": true,
+        "all_requests_completed": true,
+        "exact_input_length": 8192,
+        "exact_output_length": 1024,
+        "throughput_recomputed_from_fixed_work": true,
+        "zero_nonempty_errors": true
+      },
+      "label": "static_gdn_m36_repeat_467781",
+      "median_e2el_ms": 104582.22511550412,
+      "median_tpot_ms": 70.2430188396906,
+      "median_ttft_ms": 33244.70013201062,
+      "output_tps_per_gpu": 444.3201504075742,
+      "p99_tpot_ms": 72.65985151431407,
+      "p99_ttft_ms": 100258.31039386743,
+      "peak_aggregate_output_tps": 39506.6,
+      "source": "outputs/ht4000/current-m36-fi-gdn-static-d023-c1536-control/467781/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+      "source_sha256": "7208625bf19aa1c3bd0ddd40f6859356a76c3fed5b15905521150df634d7226f",
+      "total_tokens": 42467328,
+      "total_tps_per_gpu": 3998.881353668168,
+      "ttft_empirical_ms": {
+        "p10": 30.414301226596578,
+        "p25": 32.29003231273964,
+        "p50": 33.24470013201062,
+        "p75": 34.57719344375073,
+        "p90": 68.87594765691318,
+        "p99": 100.25831039386743
+      }
+    }
+  },
+  "same_allocation_residency_control": {
+    "config_semantic_differences": [
+      "backend.aggregated_environment.CUDA_CACHE_PATH",
+      "backend.aggregated_environment.FLASHINFER_CUBIN_DIR",
+      "backend.aggregated_environment.FLASHINFER_WORKSPACE_BASE",
+      "backend.aggregated_environment.TORCHINDUCTOR_CACHE_DIR",
+      "backend.aggregated_environment.TRITON_CACHE_DIR",
+      "backend.aggregated_environment.XDG_CACHE_HOME",
+      "backend.trtllm_config.aggregated.cuda_graph_config.max_batch_size",
+      "backend.trtllm_config.aggregated.max_batch_size",
+      "name"
+    ],
+    "job_id": "491712",
+    "m48_vs_m36": {
+      "duration_s_change_percent": -3.610894383277652,
+      "median_tpot_ms_change_percent": 29.021376701218827,
+      "median_ttft_ms_change_percent": -71.03212916796662,
+      "peak_aggregate_output_tps_change_percent": 10.615587215097854,
+      "total_tps_per_gpu_change_percent": 3.746164424054177
+    },
+    "only_runtime_difference": "max_batch_size and cuda_graph max_batch_size: 36 versus 48; both arms use the same absolute KV max_tokens and free-memory fraction",
+    "runs": {
+      "m36": {
+        "completed": 4608,
+        "duration_s": 334.14915600803215,
+        "invariants": {
+          "all_generated_texts_nonempty": true,
+          "all_requests_completed": true,
+          "exact_input_length": 8192,
+          "exact_output_length": 1024,
+          "throughput_recomputed_from_fixed_work": true,
+          "zero_nonempty_errors": true
+        },
+        "label": "final_residency_m36_491712",
+        "median_e2el_ms": 105147.6927610056,
+        "median_tpot_ms": 74.29559124830654,
+        "median_ttft_ms": 27539.465604000725,
+        "output_tps_per_gpu": 441.28796182401703,
+        "p99_tpot_ms": 82.03750019210888,
+        "p99_ttft_ms": 102861.97244621464,
+        "peak_aggregate_output_tps": 51864.30000000001,
+        "source": "outputs/final-fix-residency-kvcap-ab-20260816/m36-kvcap-a/491712/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+        "source_sha256": "2593ccc714ab56b75c5e073699759ff414a4c7c3e3b13c43a5a43d3514d2cbf9",
+        "total_tokens": 42467328,
+        "total_tps_per_gpu": 3971.591656416153,
+        "ttft_empirical_ms": {
+          "p10": 22.022755915106973,
+          "p25": 24.827769049516064,
+          "p50": 27.539465604000725,
+          "p75": 48.371574429489556,
+          "p90": 58.0710795030871,
+          "p99": 102.86197244621464
+        }
+      },
+      "m48": {
+        "completed": 4608,
+        "duration_s": 322.08338290196843,
+        "invariants": {
+          "all_generated_texts_nonempty": true,
+          "all_requests_completed": true,
+          "exact_input_length": 8192,
+          "exact_output_length": 1024,
+          "throughput_recomputed_from_fixed_work": true,
+          "zero_nonempty_errors": true
+        },
+        "label": "final_residency_m48_491712",
+        "median_e2el_ms": 108695.24680150789,
+        "median_tpot_ms": 95.85719465687534,
+        "median_ttft_ms": 7977.596823999193,
+        "output_tps_per_gpu": 457.8193344575021,
+        "p99_tpot_ms": 104.71698540951411,
+        "p99_ttft_ms": 79688.42452876503,
+        "peak_aggregate_output_tps": 57370.00000000001,
+        "source": "outputs/final-fix-residency-kvcap-ab-20260816/m48-kvcap-b/491712/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+        "source_sha256": "c7c9239846bd134d087a404a109f27c14a0938fbe125365b73666096d2a7f018",
+        "total_tokens": 42467328,
+        "total_tps_per_gpu": 4120.374010117519,
+        "ttft_empirical_ms": {
+          "p10": 4.289463509607595,
+          "p25": 5.970198660506867,
+          "p50": 7.977596823999193,
+          "p75": 21.632035887261736,
+          "p90": 58.03797450181447,
+          "p99": 79.68842452876503
+        }
+      }
+    },
+    "runtime_evidence": {
+      "m36": {
+        "final_kv_quota_gib": 34.18921219743788,
+        "formal_window_audit": {
+          "forbidden_events": [],
+          "source": "outputs/final-fix-residency-kvcap-ab-20260816/m36-kvcap-a/491712/audit-formal-window-corrected.json",
+          "source_sha256": "4b8b0da213e65a5eed1bdf6ac77a24d1e54721c31f7300a512d7cecb28106f97",
+          "status": "pass",
+          "windows": [
+            {
+              "concurrency": 1536,
+              "end": "2026-08-16T20:48:16",
+              "envelope_seconds": 379.0,
+              "measured_duration_seconds": 334.14915600803215,
+              "result": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-rerecheck/outputs/final-fix-residency-kvcap-ab-20260816/m36-kvcap-a/491712/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+              "start": "2026-08-16T20:41:57"
+            }
+          ]
+        },
+        "heartbeat_boundary": "Loading safetensors weights in parallel:  70%\nLoading safetensors weights in parallel:  72%",
+        "heartbeat_state": "stopped",
+        "heartbeat_stop_reason": "automatic model-loading boundary matched",
+        "rank0_pytorch_allowance_gib": 236.45404052734375,
+        "result_audit": {
+          "fatal_runtime_signatures": [],
+          "metrics_requests": [],
+          "source": "outputs/final-fix-residency-kvcap-ab-20260816/m36-kvcap-a/491712/audit-full.json",
+          "source_sha256": "901255355cc536a683b566c997b0b9b27b06fc61694e200ef584e7c506e4440e",
+          "status": "pass"
+        },
+        "server_log": "outputs/final-fix-residency-kvcap-ab-20260816/m36-kvcap-a/491712/logs/nvl72d032-T10_agg_w0.out",
+        "server_log_sha256": "e7b399db423337cc6c1d3b8b77e2dc621a841fea1bfd212e99fcf67ebdf63bfa"
+      },
+      "m48": {
+        "final_kv_quota_gib": 37.693561755120754,
+        "formal_window_audit": {
+          "forbidden_events": [],
+          "source": "outputs/final-fix-residency-kvcap-ab-20260816/m48-kvcap-b/491712/audit-formal-window-corrected.json",
+          "source_sha256": "beb6b9a05e5035942374977092fa219146f7e1c86f41647e41029978698e4cea",
+          "status": "pass",
+          "windows": [
+            {
+              "concurrency": 1536,
+              "end": "2026-08-16T21:19:50",
+              "envelope_seconds": 367.0,
+              "measured_duration_seconds": 322.08338290196843,
+              "result": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-rerecheck/outputs/final-fix-residency-kvcap-ab-20260816/m48-kvcap-b/491712/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_32.json",
+              "start": "2026-08-16T21:13:43"
+            }
+          ]
+        },
+        "heartbeat_boundary": "Loading safetensors weights in parallel:  71%\nLoading safetensors weights in parallel:  73%\nLoading safetensors weights in parallel:  74%",
+        "heartbeat_state": "stopped",
+        "heartbeat_stop_reason": "automatic model-loading boundary matched",
+        "rank0_pytorch_allowance_gib": 232.9248046875,
+        "result_audit": {
+          "fatal_runtime_signatures": [],
+          "metrics_requests": [],
+          "source": "outputs/final-fix-residency-kvcap-ab-20260816/m48-kvcap-b/491712/audit-full.json",
+          "source_sha256": "750d598ae0dfda26859b318c7de04d9dc2031e74dec3fd976d1d9ec724a22261",
+          "status": "pass"
+        },
+        "server_log": "outputs/final-fix-residency-kvcap-ab-20260816/m48-kvcap-b/491712/logs/nvl72d032-T10_agg_w0.out",
+        "server_log_sha256": "e56856f6c4c0d69c5ddf2bc071c951345eedd2174c369f0f3a4d1b55110ebfc3"
+      }
+    },
+    "shared_absolute_kv_max_tokens": 479232,
+    "shared_average_sequence_capacity": 52,
+    "status": "complete"
+  },
+  "schema_version": 1,
+  "selected_auto_kv088_reproduction": {
+    "count": 2,
+    "labels": [
+      "m104_replay_auto_kv088_489192",
+      "m104_replay_auto_kv088_curve_489281"
+    ],
+    "mean_duration_s": 324.5583086129918,
+    "mean_median_tpot_ms": 96.51814409506787,
+    "mean_median_ttft_ms": 8062.73296350264,
+    "mean_peak_aggregate_output_tps": 57442.65000000001,
+    "mean_total_tps_per_gpu": 4089.0863714603083,
+    "population_cv_percent": 0.5689248507921486,
+    "range_percent_of_mean": 1.1378497015842972,
+    "total_tps_per_gpu": [
+      4112.350199997901,
+      4065.8225429227155
+    ]
+  },
+  "stable_repaired_family_reproduction": {
+    "count": 4,
+    "labels": [
+      "m104_replay_off_lowm_488899",
+      "m104_replay_off_lowm_repeat_488993",
+      "m104_replay_auto_kv088_489192",
+      "m104_replay_auto_kv088_curve_489281"
+    ],
+    "mean_duration_s": 323.62814179425186,
+    "mean_median_tpot_ms": 96.24833493793469,
+    "mean_median_ttft_ms": 7925.646997369768,
+    "mean_peak_aggregate_output_tps": 57414.275,
+    "mean_total_tps_per_gpu": 4100.806762983978,
+    "population_cv_percent": 0.4932543029063248,
+    "range_percent_of_mean": 1.1763348376923548,
+    "total_tps_per_gpu": [
+      4114.06176150214,
+      4110.992547513157,
+      4112.350199997901,
+      4065.8225429227155
+    ]
+  },
+  "trajectory_variation": {
+    "index_aligned_exact_fraction_example": 0.13997395833333334,
+    "interpretation": "Generated-token and expert-routing trajectories vary materially across runs, so isolated cross-allocation deltas near one percent are not causal proof.",
+    "source": "audits/ht4000/c1536-generated-text-trajectories.json"
+  },
+  "workload": {
+    "adp_ranks": 32,
+    "concurrency": 1536,
+    "initial_requests_per_rank": 48.0,
+    "input_fraction_of_total_tokens": 0.8888888888888888,
+    "input_length": 8192,
+    "m36_global_resident_slots": 1152,
+    "m36_initial_queued_requests": 384,
+    "m48_global_resident_slots": 1536,
+    "m48_initial_queued_requests": 0,
+    "output_length": 1024,
+    "tokens_per_request": 9216
+  }
+}

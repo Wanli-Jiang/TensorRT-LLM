@@ -1,0 +1,116 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: oakhaven-fp8-mtp3-ht4k-c1536
+slurm:
+  account: "@@SLURM_ACCOUNT@@"
+  partition: "@@SLURM_PARTITION@@"
+  time_limit: 02:00:00
+sbatch_directives:
+  qos: "@@SLURM_QOS@@"
+  cpus-per-task: '16'
+  mem: '0'
+  exclusive: ''
+  switches: 1@10:00
+  comment: >-
+    {"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"PR17537 plus GDN T1 fix; MTP3 C1536 audited reproduction."}}
+model:
+  path: "@@MODEL_PATH@@"
+  container: "@@CONTAINER_IMAGE@@"
+  precision: fp8
+identity:
+  container:
+    image: "@@CONTAINER_IMAGE@@"
+  frameworks:
+    tensorrt_llm: 1.3.0rc25
+extra_mount:
+  - "@@DELIVERY_ROOT@@/configs/eplb/mtp3-static544-mean-job414038.yaml:/eplb.yaml:ro"
+resources:
+  gpu_type: "@@GPU_TYPE@@"
+  gpus_per_node: 4
+  agg_nodes: 8
+  agg_workers: 1
+  gpus_per_agg: 32
+frontend:
+  type: trtllm_serve
+  enable_multiple_frontends: false
+backend:
+  type: trtllm
+  aggregated_environment:
+    PYTHONUNBUFFERED: '1'
+    PYTHONDONTWRITEBYTECODE: '1'
+    TLLM_LOG_LEVEL: INFO
+    TLLM_ALL_RANK_LOG: '1'
+    ENABLE_CONFIGURABLE_MOE: '1'
+    TRTLLM_FORCE_COMM_METHOD: NVLINK_ONE_SIDED
+    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: '2.3'
+    TRTLLM_USE_GDN_REPLAY: '1'
+    TRTLLM_LOW_M_GEMM_BACKEND: auto
+    TLLM_MOE_A2A_DISPATCH_BLOCK_SIZE: '256'
+    TLLM_MOE_A2A_COMBINE_BLOCK_SIZE: '256'
+    TRTLLM_DEEPGEMM_MOE_MAX_NUM_TOKENS: '65536'
+    TRTLLM_MOE_A2A_WORKSPACE_MB: '2304'
+    TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: 'True'
+    FLASHINFER_DISABLE_VERSION_CHECK: '1'
+    XDG_CACHE_HOME: /tmp/final-fix-residency-kvcap-m48-b/{node}/xdg
+    CUDA_CACHE_PATH: /tmp/final-fix-residency-kvcap-m48-b/{node}/cuda
+    TORCHINDUCTOR_CACHE_DIR: /tmp/final-fix-residency-kvcap-m48-b/{node}/torchinductor
+    TRITON_CACHE_DIR: /tmp/final-fix-residency-kvcap-m48-b/{node}/triton
+    FLASHINFER_WORKSPACE_BASE: /tmp/final-fix-residency-kvcap-m48-b/{node}/fi-workspace
+    FLASHINFER_CUBIN_DIR: /tmp/final-fix-residency-kvcap-m48-b/{node}/fi-cubins
+  trtllm_config:
+    aggregated:
+      tensor_parallel_size: 32
+      moe_expert_parallel_size: 32
+      pipeline_parallel_size: 1
+      enable_attention_dp: true
+      enable_lm_head_tp_in_adp: true
+      disable_mm_encoder: true
+      max_batch_size: 48
+      max_num_tokens: 8512
+      max_seq_len: 9472
+      enable_chunked_prefill: false
+      cuda_graph_config:
+        enable_padding: true
+        max_batch_size: 48
+      kv_cache_config:
+        enable_block_reuse: false
+        use_kv_cache_manager_v2: true
+        free_gpu_memory_fraction: 0.88
+        # Fix absolute KV capacity at 52 average 9216-token sequences/rank.
+        max_tokens: 479232
+        avg_seq_len: 9216
+        dtype: fp8
+        mamba_ssm_cache_dtype: bfloat16
+        mamba_ssm_stochastic_rounding: false
+      moe_config:
+        backend: DEEPGEMM
+        max_num_tokens: 65536
+        use_low_precision_moe_combine: true
+        load_balancer: /eplb.yaml
+      speculative_config:
+        decoding_type: MTP
+        max_draft_len: 3
+      stream_interval: 10
+      return_perf_metrics: false
+      enable_iter_perf_stats: false
+      enable_iter_req_stats: false
+      print_iter_log: false
+      trust_remote_code: true
+      num_postprocess_workers: 4
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+benchmark:
+  type: sa-bench
+  dataset_name: random
+  isl: 8192
+  osl: 1024
+  concurrencies: [1536]
+  req_rate: inf
+  random_range_ratio: 1.0
+  num_prompts_mult: 3
+  # One untimed population wave, followed by three formal waves.
+  num_warmup_mult: 1
+  use_chat_template: false
+  reuse_http_connections: true

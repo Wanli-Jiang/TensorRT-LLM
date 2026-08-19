@@ -1,0 +1,121 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-License-Identifier: Apache-2.0
+
+name: "oakhaven-max-stack-final-nomtp-adp32-m104-t8448-static544-c3264"
+
+slurm:
+  account: "@@SLURM_ACCOUNT@@"
+  partition: "@@SLURM_PARTITION@@"
+  time_limit: "01:15:00"
+
+sbatch_directives:
+  qos: "@@SLURM_QOS@@"
+  cpus-per-task: "16"
+  mem: "0"
+  exclusive: ""
+  switches: "1@10:00"
+  comment: >-
+    {"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Current-stack FP8 no-MTP C3264 audited reproduction."}}
+
+model:
+  path: "@@MODEL_PATH@@"
+  container: "@@CONTAINER_IMAGE@@"
+  precision: "fp8"
+
+identity:
+  container:
+    image: "@@CONTAINER_IMAGE@@"
+  frameworks:
+    tensorrt_llm: "1.3.0rc25"
+
+extra_mount:
+  - "@@DELIVERY_ROOT@@/configs/eplb/nomtp-static544-job411225.yaml:/eplb.yaml:ro"
+
+resources:
+  gpu_type: "@@GPU_TYPE@@"
+  gpus_per_node: 4
+  agg_nodes: 8
+  agg_workers: 1
+  gpus_per_agg: 32
+
+frontend:
+  type: "trtllm_serve"
+  enable_multiple_frontends: false
+
+backend:
+  type: "trtllm"
+  aggregated_environment:
+    PYTHONUNBUFFERED: "1"
+    PYTHONDONTWRITEBYTECODE: "1"
+    TLLM_LOG_LEVEL: "INFO"
+    TLLM_ALL_RANK_LOG: "1"
+    TRTLLM_ENABLE_PDL: "1"
+    TRTLLM_LOW_M_GEMM_BACKEND: "auto"
+    FLASHINFER_NO_DOWNLOAD: "1"
+    TRTLLM_USE_GDN_REPLAY: "0"
+    ENABLE_CONFIGURABLE_MOE: "1"
+    TRTLLM_FORCE_COMM_METHOD: "NVLINK_ONE_SIDED"
+    TLLM_MOE_A2A_DISPATCH_BLOCK_SIZE: "256"
+    TLLM_MOE_A2A_COMBINE_BLOCK_SIZE: "256"
+    TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: "True"
+    TRTLLM_DEEPGEMM_MOE_MAX_NUM_TOKENS: "65536"
+    TRTLLM_MOE_A2A_WORKSPACE_MB: "2304"
+    XDG_CACHE_HOME: "/tmp/oakhaven-stack-final-nomtp-c3264/{node}/xdg"
+    CUDA_CACHE_PATH: "/tmp/oakhaven-stack-final-nomtp-c3264/{node}/cuda"
+    TORCHINDUCTOR_CACHE_DIR: "/tmp/oakhaven-stack-final-nomtp-c3264/{node}/torchinductor"
+    TRITON_CACHE_DIR: "/tmp/oakhaven-stack-final-nomtp-c3264/{node}/triton"
+    FLASHINFER_WORKSPACE_BASE: "/tmp/oakhaven-stack-final-nomtp-c3264/{node}/fi-workspace"
+
+  trtllm_config:
+    aggregated:
+      tensor_parallel_size: 32
+      moe_expert_parallel_size: 32
+      pipeline_parallel_size: 1
+      enable_attention_dp: true
+      enable_lm_head_tp_in_adp: true
+      disable_mm_encoder: true
+      max_batch_size: 104
+      max_num_tokens: 8448
+      max_seq_len: 9472
+      enable_chunked_prefill: false
+      cuda_graph_config:
+        enable_padding: true
+        max_batch_size: 104
+      kv_cache_config:
+        enable_block_reuse: false
+        use_kv_cache_manager_v2: true
+        free_gpu_memory_fraction: 0.92
+        avg_seq_len: 9216
+        dtype: "fp8"
+        mamba_ssm_cache_dtype: "bfloat16"
+        mamba_ssm_stochastic_rounding: false
+      moe_config:
+        backend: "DEEPGEMM"
+        max_num_tokens: 65536
+        use_low_precision_moe_combine: true
+        load_balancer: "/eplb.yaml"
+      stream_interval: 10
+      return_perf_metrics: false
+      enable_iter_perf_stats: false
+      enable_iter_req_stats: false
+      print_iter_log: false
+      trust_remote_code: true
+      num_postprocess_workers: 4
+
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+benchmark:
+  type: "sa-bench"
+  dataset_name: "random"
+  isl: 8192
+  osl: 1024
+  concurrencies: [3264]
+  req_rate: "inf"
+  random_range_ratio: 1.0
+  num_prompts_mult: 3
+  # One untimed population wave, followed by three formal waves.
+  num_warmup_mult: 1
+  use_chat_template: false
+  reuse_http_connections: true
