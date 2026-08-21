@@ -1,0 +1,166 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+slurm:
+  script_file: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/scripts/run_disagg_with_loading_heartbeat.slurm
+  partition: batch
+  account: coreai_comparch_trtllm
+  job_time: 02:00:00
+  job_name: nv4-disagg-mtp3-client-oversample-retry
+  extra_args: --gres=gpu:4 --qos=short --switches=1@10:00 --exclusive --mem=0 --cpus-per-task=16
+  set_segment: true
+  numa_bind: true
+benchmark:
+  mode: e2e
+  use_nv_sa_benchmark: false
+  enable_benchmark: true
+  multi_round: 12
+  benchmark_ratio: 1.0
+  streaming: true
+  concurrency_list: '768'
+  input_length: 8192
+  output_length: 1024
+  dataset_file: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TRTLLM5/oak-nvfp4-disagg-sweep/experiments/oakhaven-max-nvfp4-disagg-8k1k-20260812/data/oakhaven-max-8192-1024-4096-ratio-1.0_for_serve.json
+  env_var: {}
+hardware:
+  gpus_per_node: 4
+  num_ctx_servers: 4
+  num_gen_servers: 1
+environment:
+  container_mount: /lustre/:/lustre,/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820:/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820,/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/setup/trtllm-llmapi-launch:/usr/local/bin/trtllm-llmapi-launch:ro,/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/setup/current-image-trtllm-llmapi-launch.original:/opt/current-image-trtllm-llmapi-launch.original:ro,/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TRTLLM5/oak-nvfp4-disagg-sweep/experiments/oakhaven-max-nvfp4-disagg-8k1k-20260812/data/oakhaven-max-8192-1024-4096-ratio-1.0_for_serve.json:/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TRTLLM5/oak-nvfp4-disagg-sweep/experiments/oakhaven-max-nvfp4-disagg-8k1k-20260812/data/oakhaven-max-8192-1024-4096-ratio-1.0_for_serve.json:ro
+  container_image: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/containers/trtllm-9a6889b-worktree-gdnstatic-crossmap-qa-20260814.sqsh
+  model_path: /lustre/fsw/portfolios/coreai/users/williamj/models/oakhaven-max-final-nvfp4-routed-experts-experimental_vv1-clean
+  trtllm_repo: none
+  build_wheel: false
+  cuda_architectures: ''
+  trtllm_wheel_path: ''
+  worker_env_var: TLLM_LOG_LEVEL=INFO PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1
+    TRTLLM_SERVER_DISABLE_GC=1 TRTLLM_WORKER_DISABLE_GC=1 TRTLLM_ENABLE_PDL=1 NCCL_DEBUG=WARN
+    NCCL_GRAPH_MIXING_SUPPORT=0 NCCL_MNNVL_ENABLE=1 NCCL_CUMEM_ENABLE=1 OMPI_MCA_coll_ucc_enable=0
+    MIMALLOC_PURGE_DELAY=0 TRTLLM_HF_WEIGHT_CACHE=0 TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=False
+    TRT_LLM_LOAD_WEIGHTS_NUM_WORKERS=4 ENABLE_CONFIGURABLE_MOE=1 TRTLLM_FORCE_COMM_METHOD=NVLINK_ONE_SIDED
+    TRTLLM_MOE_A2A_WORKSPACE_MB=2304 TLLM_SPEC_SKIP_IDENTITY_DRAFT_GATHER=0 TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.3
+    TLLM_ALL_RANK_LOG=1
+  server_env_var: TRTLLM_SERVER_DISABLE_GC=1 TRTLLM_DISAGG_SERVER_DISABLE_GC=1 TLLM_DISABLE_MPI=1
+    PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1
+  ctx_worker_env_var: TRTLLM_USE_GDN_REPLAY=1
+  gen_worker_env_var: TRTLLM_USE_GDN_REPLAY=1
+  work_dir: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/setup/disagg-client-oversample-harness
+profiling:
+  nsys_on: false
+  ctx_profile_range: 10-30
+  gen_profile_range: 200-250
+accuracy:
+  enable_accuracy_test: false
+  tasks: {}
+worker_config:
+  ctx:
+    tensor_parallel_size: 8
+    moe_expert_parallel_size: 8
+    enable_attention_dp: true
+    enable_lm_head_tp_in_adp: true
+    pipeline_parallel_size: 1
+    context_parallel_size: 1
+    disable_mm_encoder: true
+    max_batch_size: 8
+    max_num_tokens: 8192
+    max_seq_len: 9472
+    enable_chunked_prefill: true
+    cuda_graph_config: null
+    disable_overlap_scheduler: true
+    print_iter_log: false
+    trust_remote_code: true
+    kv_cache_config:
+      enable_block_reuse: false
+      use_kv_cache_manager_v2: true
+      free_gpu_memory_fraction: 0.85
+      dtype: fp8
+      mamba_ssm_cache_dtype: bfloat16
+      mamba_ssm_stochastic_rounding: false
+      tokens_per_block: 32
+    moe_config:
+      backend: CUTEDSL
+      max_num_tokens: 8192
+      use_low_precision_moe_combine: true
+    nvfp4_gemm_config:
+      allowed_backends:
+      - cutlass
+      - cublaslt
+      - cutedsl
+      - cuda_core
+    cache_transceiver_config:
+      max_tokens_in_buffer: 8448
+      backend: NIXL
+      transceiver_runtime: PYTHON
+      kv_transfer_timeout_ms: 600000
+      kv_cache_bounce_size_mb: 0
+    attention_dp_config:
+      enable_balance: true
+      batching_wait_iters: 0
+      timeout_iters: 60
+    speculative_config:
+      decoding_type: MTP
+      max_draft_len: 3
+    return_perf_metrics: false
+    enable_iter_perf_stats: false
+    enable_iter_req_stats: false
+  gen:
+    tensor_parallel_size: 16
+    moe_expert_parallel_size: 16
+    enable_attention_dp: true
+    enable_lm_head_tp_in_adp: true
+    pipeline_parallel_size: 1
+    context_parallel_size: 1
+    disable_mm_encoder: true
+    max_batch_size: 48
+    max_num_tokens: 1024
+    max_seq_len: 9472
+    enable_chunked_prefill: true
+    cuda_graph_config:
+      enable_padding: true
+      batch_sizes:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 12
+      - 16
+      - 20
+      - 24
+      - 28
+      - 32
+      - 36
+      - 40
+      - 44
+      - 48
+    print_iter_log: false
+    trust_remote_code: true
+    kv_cache_config:
+      enable_block_reuse: false
+      use_kv_cache_manager_v2: true
+      free_gpu_memory_fraction: 0.88
+      dtype: fp8
+      mamba_ssm_cache_dtype: bfloat16
+      mamba_ssm_stochastic_rounding: false
+    moe_config:
+      backend: CUTEDSL
+      max_num_tokens: 8192
+      use_low_precision_moe_combine: true
+    nvfp4_gemm_config:
+      allowed_backends:
+      - cutlass
+      - cublaslt
+      - cutedsl
+      - cuda_core
+    cache_transceiver_config:
+      max_tokens_in_buffer: 8448
+      backend: NIXL
+      transceiver_runtime: PYTHON
+    speculative_config:
+      decoding_type: MTP
+      max_draft_len: 3
+    stream_interval: 10
+    num_postprocess_workers: 4
+    return_perf_metrics: false
+    enable_iter_perf_stats: false
+    enable_iter_req_stats: false

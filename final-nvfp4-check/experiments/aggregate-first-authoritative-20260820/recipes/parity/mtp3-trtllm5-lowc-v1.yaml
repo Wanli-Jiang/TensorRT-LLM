@@ -1,0 +1,116 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: nvfp4-trtllm5-mtp3-lowc-parity-v1
+slurm:
+  account: coreai_comparch_trtllm
+  partition: batch
+  time_limit: 02:00:00
+sbatch_directives:
+  qos: short
+  cpus-per-task: '16'
+  mem: '0'
+  exclusive: ''
+  switches: 1@10:00
+  comment: '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"TRTLLM5 Oakhaven NVFP4 MTP3 low-concurrency parity diagnostic; audited loading-only heartbeat; metrics endpoint forbidden."}}'
+model:
+  path: /lustre/fsw/portfolios/coreai/users/williamj/models/oakhaven-max-final-nvfp4-routed-experts-experimental_vv1-clean
+  container: /lustre/fsw/portfolios/coreai/users/williamj/containers/trtllm-sbsa-16694-base-20260731-built3.sqsh
+  precision: fp4
+identity:
+  container:
+    image: /lustre/fsw/portfolios/coreai/users/williamj/containers/trtllm-sbsa-16694-base-20260731-built3.sqsh
+extra_mount:
+  - /lustre/fsw/portfolios/coreai/users/williamj/TRTLLM5:/opt/trtllm5-dev:ro
+  - /lustre/fsw/portfolios/coreai/users/williamj/TRTLLM5/oak-nvfp4-sweep:/opt/trtllm5-handoff:ro
+  - /lustre/fsw/portfolios/coreai/users/williamj/TRTLLM5/oak-nvfp4-sweep/bin/trtllm-llmapi-launch:/usr/local/bin/trtllm-llmapi-launch:ro
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 8
+srun_options:
+  mem: '0'
+  container-remap-root: ''
+  cpu-bind: none
+frontend:
+  type: trtllm_serve
+  enable_multiple_frontends: false
+backend:
+  type: trtllm
+  aggregated_environment:
+    PYTHONUNBUFFERED: '1'
+    PYTHONDONTWRITEBYTECODE: '1'
+    PYTHONNOUSERSITE: '1'
+    NCCL_DEBUG: WARN
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    OMPI_MCA_coll_ucc_enable: '0'
+    TLLM_ALL_RANK_LOG: '1'
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_ENABLE_PDL: '1'
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    TRTLLM_LOW_M_GEMM_BACKEND: 'off'
+    TRTLLM_USE_GDN_REPLAY: '1'
+    TRTLLM_HF_WEIGHT_CACHE: '0'
+    TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: 'False'
+    TRT_LLM_LOAD_WEIGHTS_NUM_WORKERS: '4'
+    TLLM_SPEC_SKIP_IDENTITY_DRAFT_GATHER: '0'
+    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: '2.3'
+  trtllm_config:
+    aggregated:
+      tensor_parallel_size: 8
+      moe_expert_parallel_size: 1
+      pipeline_parallel_size: 1
+      enable_attention_dp: false
+      enable_lm_head_tp_in_adp: false
+      disable_mm_encoder: true
+      max_batch_size: 128
+      max_num_tokens: 8704
+      max_seq_len: 9472
+      enable_chunked_prefill: false
+      allreduce_strategy: MNNVL
+      cuda_graph_config:
+        enable_padding: true
+        max_batch_size: 128
+      kv_cache_config:
+        enable_block_reuse: false
+        use_kv_cache_manager_v2: false
+        free_gpu_memory_fraction: 0.70
+        dtype: fp8
+        mamba_ssm_cache_dtype: bfloat16
+        mamba_ssm_stochastic_rounding: false
+      moe_config:
+        backend: TRTLLM
+        max_num_tokens: 8704
+        use_low_precision_moe_combine: true
+      nvfp4_gemm_config:
+        allowed_backends: [cutlass, cublaslt, cutedsl, cuda_core]
+      stream_interval: 10
+      return_perf_metrics: false
+      enable_iter_perf_stats: false
+      enable_iter_req_stats: false
+      print_iter_log: false
+      trust_remote_code: true
+      num_postprocess_workers: 4
+      speculative_config:
+        decoding_type: MTP
+        max_draft_len: 3
+health_check:
+  max_attempts: 480
+  interval_seconds: 10
+benchmark:
+  type: sa-bench
+  dataset_name: random
+  isl: 8192
+  osl: 1024
+  req_rate: inf
+  random_range_ratio: 1.0
+  use_chat_template: false
+  concurrencies: [1, 2, 4, 8]
+  num_prompts_mult: 20
+  num_warmup_mult: 3
+  reuse_http_connections: false

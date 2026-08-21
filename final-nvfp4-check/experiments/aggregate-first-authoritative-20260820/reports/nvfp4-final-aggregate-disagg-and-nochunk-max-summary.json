@@ -1,0 +1,337 @@
+{
+  "_copyright": "Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.",
+  "schema_version": 1,
+  "generated_at": "2026-08-20T13:55:13-07:00",
+  "timezone": "America/Los_Angeles",
+  "integrity_status": "pass",
+  "scope": "Oakhaven Max NVFP4, random exact ISL8192/OSL1024/RR1.0, aggregate maximum-throughput search plus accepted low-latency, KV-manager, and disaggregated context",
+  "identity": {
+    "model": "/lustre/fsw/portfolios/coreai/users/williamj/models/oakhaven-max-final-nvfp4-routed-experts-experimental_vv1-clean",
+    "model_config_sha256": "3b0153fad68686977da18f663455c4164499d0cf752d0767d19e2b46090b34e9",
+    "checkpoint_precision": "NVFP4",
+    "container": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/containers/trtllm-9a6889b-worktree-gdnstatic-crossmap-qa-20260814.sqsh",
+    "container_sha256": "08c33698800171f1836c17346d4e8c6ef72705f360d925f1ab075ed035e3fb59",
+    "tensorrt_llm_version": "1.3.0rc25",
+    "tensorrt_llm_repo_head": "e49b205b0423ec611a5b1062423f9598674ba0e8",
+    "srt_slurm_head": "922f005de4674cd51cfdc6f6b361ad07b1893014",
+    "source_overlay": false
+  },
+  "workload": {
+    "dataset": "random",
+    "input_tokens": 8192,
+    "output_tokens": 1024,
+    "random_range_ratio": 1.0,
+    "request_rate": "infinite",
+    "formal_requests_per_concurrency": 3,
+    "warmup_requests_per_concurrency": 1,
+    "serving_gpus": 16,
+    "gpu_type": "GB300",
+    "nodes": 4,
+    "parallelism": "TP16/EP16/ADP16/PP1",
+    "moe_backend": "CUTEDSL",
+    "kv_dtype": "FP8",
+    "kv_manager": "V1",
+    "block_reuse": false,
+    "placement": "Static528"
+  },
+  "headline": {
+    "no_chunk_hypothesis": "falsified",
+    "actual_optimization": "keep chunked prefill enabled and increase the synchronized scheduler/MoE token budget",
+    "nomtp": {
+      "maximum_observed_tps_per_gpu": 6096.885835266192,
+      "independent_repeat_tps_per_gpu": 6062.4478245528835,
+      "repeat_change_percent": -0.5648459171419762,
+      "recommended_concurrency": 2048,
+      "recommended_budget": 16896,
+      "reproducibility_statement": "two C2048 runs both exceeded 6,000 total tokens/s/GPU"
+    },
+    "mtp3": {
+      "maximum_observed_tps_per_gpu": 6036.814938520319,
+      "independent_curve_peak_tps_per_gpu": 5874.823878752717,
+      "independent_curve_peak_concurrency": 1024,
+      "c640_repeat_minimum_tps_per_gpu": 5677.047979436704,
+      "c640_repeat_median_tps_per_gpu": 5820.719381742285,
+      "c640_repeat_mean_tps_per_gpu": 5844.860766566436,
+      "c640_repeat_maximum_tps_per_gpu": 6036.814938520319,
+      "c640_max_to_min_spread_percent": 6.337218927632038,
+      "recommended_concurrency_band": "512-1024 for pure throughput; C512-640 when tail latency matters",
+      "recommended_budget": 33792,
+      "reproducibility_statement": "the 5.7-5.9k band is reproducible; 6,036.81 is a valid observed maximum but not a stable floor"
+    }
+  },
+  "nomtp_maximum_search": {
+    "configuration": {
+      "max_batch_size": 128,
+      "scheduler_max_num_tokens": 16896,
+      "moe_max_num_tokens": 16896,
+      "enable_chunked_prefill": true,
+      "cuda_graph_max_batch_size": 128,
+      "gdn_cached_replay": false,
+      "speculative_decoding": false,
+      "static_map_sha256": "68ef80e1b996cc900f29c859221155bf6a3b7e7c1e5c83faf476d1c12b2f88be"
+    },
+    "screen_at_c2048": [
+      {
+        "job": 527441,
+        "chunked_prefill": false,
+        "budget": 8448,
+        "total_tps_per_gpu": 5486.548462883064
+      },
+      {
+        "job": 527442,
+        "chunked_prefill": true,
+        "budget": 8448,
+        "total_tps_per_gpu": 5494.489964894212,
+        "change_vs_nochunk_same_budget_percent": 0.14474495331395776
+      },
+      {
+        "job": 527443,
+        "chunked_prefill": true,
+        "budget": 16896,
+        "total_tps_per_gpu": 6096.885835266192,
+        "change_vs_nochunk_budget8448_percent": 11.124250091147637
+      }
+    ],
+    "independent_curve_job": 527727,
+    "independent_curve": [
+      {
+        "concurrency": 1536,
+        "total_tps_per_gpu": 5777.309253828719,
+        "completed_requests": 4608,
+        "median_ttft_ms": 12579.090912011452,
+        "median_tpot_ms": 135.50125915151
+      },
+      {
+        "concurrency": 1792,
+        "total_tps_per_gpu": 5970.145728066496,
+        "completed_requests": 5376,
+        "median_ttft_ms": 12662.26948799158,
+        "median_tpot_ms": 155.28098973215438
+      },
+      {
+        "concurrency": 2048,
+        "total_tps_per_gpu": 6062.4478245528835,
+        "completed_requests": 6144,
+        "median_ttft_ms": 14797.994000007748,
+        "median_tpot_ms": 174.86333558553824
+      },
+      {
+        "concurrency": 2304,
+        "total_tps_per_gpu": 5905.016182957838,
+        "completed_requests": 6912,
+        "median_ttft_ms": 23126.824784005294,
+        "median_tpot_ms": 182.45874920039225,
+        "change_vs_c2048_percent": -2.59683293202867
+      }
+    ],
+    "upper_budget_bracket": {
+      "job": 527728,
+      "concurrency": 2048,
+      "budget": 33792,
+      "total_tps_per_gpu": 6030.29098095866,
+      "change_vs_budget16896_repeat_percent": -0.5304267273689156,
+      "conclusion": "16896 is the accepted no-MTP budget; doubling again does not improve throughput"
+    },
+    "comparison": {
+      "current_image_original_static528_tps_per_gpu": 5506.879473376571,
+      "repeat_change_vs_current_image_original_static528_percent": 10.0886237634626,
+      "trtllm5_static528_reference_tps_per_gpu": 5476.811,
+      "repeat_change_vs_trtllm5_static528_percent": 10.69302600642754
+    }
+  },
+  "mtp3_maximum_search": {
+    "configuration": {
+      "max_batch_size": 32,
+      "scheduler_max_num_tokens": 33792,
+      "moe_max_num_tokens": 33792,
+      "enable_chunked_prefill": true,
+      "cuda_graph_max_batch_size": 32,
+      "gdn_cached_replay": true,
+      "max_draft_len": 3,
+      "forced_accepted_draft_tokens": 2.3,
+      "expected_total_accept_length": 3.3,
+      "static_map_sha256": "cbc575a8d0bf221a76d3a04552a123d27964b788dee233be4eced6b6a71b30dc"
+    },
+    "budget_and_placement_screen_at_c640": [
+      {
+        "job": 527208,
+        "placement": "no-EPLB",
+        "budget": 8448,
+        "total_tps_per_gpu": 4735.091754193945
+      },
+      {
+        "job": 527209,
+        "placement": "no-EPLB",
+        "budget": 16896,
+        "total_tps_per_gpu": 4935.069237745701,
+        "change_vs_noeplb_budget8448_percent": 4.223307465470594
+      },
+      {
+        "job": 527210,
+        "placement": "no-EPLB",
+        "budget": 33792,
+        "total_tps_per_gpu": 5113.232214116065,
+        "change_vs_noeplb_budget8448_percent": 7.985916209272914
+      },
+      {
+        "job": 527211,
+        "placement": "Static528",
+        "budget": 8448,
+        "total_tps_per_gpu": 5456.977523319584,
+        "change_vs_noeplb_budget8448_percent": 15.245444156097987
+      }
+    ],
+    "independent_curve_job": 527804,
+    "independent_curve": [
+      {
+        "concurrency": 384,
+        "total_tps_per_gpu": 5501.200887927951,
+        "completed_requests": 1152,
+        "median_ttft_ms": 12321.460832507,
+        "median_tpot_ms": 25.326037377331073
+      },
+      {
+        "concurrency": 512,
+        "total_tps_per_gpu": 5793.827267934539,
+        "completed_requests": 1536,
+        "median_ttft_ms": 11239.72350799886,
+        "median_tpot_ms": 35.136380542529075
+      },
+      {
+        "concurrency": 640,
+        "total_tps_per_gpu": 5677.047979436704,
+        "completed_requests": 1920,
+        "median_ttft_ms": 16207.405601497157,
+        "median_tpot_ms": 43.12239359530385
+      },
+      {
+        "concurrency": 768,
+        "total_tps_per_gpu": 5525.362974375953,
+        "completed_requests": 2304,
+        "median_ttft_ms": 29350.858610501746,
+        "median_tpot_ms": 42.016810468716784
+      },
+      {
+        "concurrency": 896,
+        "total_tps_per_gpu": 5627.114486204701,
+        "completed_requests": 2688,
+        "median_ttft_ms": 45557.81410750933,
+        "median_tpot_ms": 43.64247999169621
+      },
+      {
+        "concurrency": 1024,
+        "total_tps_per_gpu": 5874.823878752717,
+        "completed_requests": 3072,
+        "median_ttft_ms": 55261.86409300135,
+        "median_tpot_ms": 42.30572248875383
+      }
+    ],
+    "c640_repeats": [
+      {
+        "job": 527689,
+        "total_tps_per_gpu": 6036.814938520319
+      },
+      {
+        "job": 527804,
+        "total_tps_per_gpu": 5677.047979436704
+      },
+      {
+        "job": 528007,
+        "total_tps_per_gpu": 5820.719381742285
+      }
+    ],
+    "repeat_statistics": {
+      "minimum_tps_per_gpu": 5677.047979436704,
+      "median_tps_per_gpu": 5820.719381742285,
+      "mean_tps_per_gpu": 5844.860766566436,
+      "maximum_tps_per_gpu": 6036.814938520319,
+      "max_to_min_spread_percent": 6.337218927632038,
+      "minimum_change_vs_budget8448_repeat_percent": 5.91444835425734,
+      "median_change_vs_budget8448_repeat_percent": 8.594869124805072
+    },
+    "invalid_upper_budget": {
+      "job": 527805,
+      "budget": 67584,
+      "status": "FAILED",
+      "exit_code": "87:0",
+      "warmup_planned_requests": 640,
+      "warmup_completed_requests": 114,
+      "formal_result_present": false,
+      "failure_kernel": "moeComputeRouteDevice / moe_load_balance_routing",
+      "failure": "CUDA unspecified launch failure",
+      "classification": "invalid configuration/kernel failure, never a throughput datum"
+    },
+    "acceptance_length_note": "Aggregate performance metrics were intentionally disabled, so measured accepted length is unavailable in these aggregate JSONs. The forced value is 2.3 draft tokens (expected total acceptance length 3.3); the accepted disaggregated reproduction independently measured 3.287351622349686."
+  },
+  "no_chunk_causal_result": {
+    "mtp3_same_budget_chunk_flag_effect_percent_range": [
+      -9.105570245242633,
+      -5.499680692173703
+    ],
+    "mtp3_budget1024_to8448_effect_percent_range": [
+      67.65267061682924,
+      75.24222277023954
+    ],
+    "nomtp_same_budget_chunk_flag_effect_percent_at_c2048": 0.14474495331395776,
+    "nomtp_budget8448_to16896_effect_percent_at_c2048": 10.963642136042243,
+    "root_cause": "Without chunking, a context request requires its full remaining context to fit in the current max_num_tokens remainder; otherwise the scheduler stops. With chunking, generation requests remain resident and context chunks consume remaining capacity. Raising the budget admits more full 8192-token contexts per iteration and produces larger/more useful MoE token shapes.",
+    "causal_limit": "The maximum search synchronizes scheduler and MoE max_num_tokens, so the exact scheduler-versus-MoE contribution above 8448 is not separately identified. The 1024-to-8448 evidence strongly identifies scheduler capacity as the dominant first-order effect."
+  },
+  "kv_manager_v2_diagnostic": {
+    "low_latency_nomtp": "no regression",
+    "low_latency_mtp3": "no regression",
+    "high_throughput_nomtp": "approximately neutral but capacity-confounded",
+    "high_throughput_mtp3": "variable regression: -10.31% at C640, -1.20% at C768, -4.49% at C1024",
+    "maximum_search_choice": "V1"
+  },
+  "accepted_disaggregated_reproduction": {
+    "nomtp": {
+      "job": 526474,
+      "topology": "3 x CTX8-ADP8/EP8 + 1 x GEN16-ADP16/EP16",
+      "serving_gpus": 40,
+      "concurrency": 1536,
+      "total_tps_per_gpu": 5341.003851119988,
+      "trtllm5_reference_tps_per_gpu": 5321.71073599,
+      "change_percent": 0.36253596046684766
+    },
+    "mtp3": {
+      "job": 526475,
+      "topology": "4 x CTX8-ADP8/EP8 + 1 x GEN16-ADP16/EP16",
+      "serving_gpus": 48,
+      "concurrency": 768,
+      "total_tps_per_gpu": 5298.250297000662,
+      "trtllm5_reference_tps_per_gpu": 5296.636804728,
+      "change_percent": 0.030462580919676796,
+      "mean_accepted_length": 3.287351622349686
+    }
+  },
+  "integrity_gates": {
+    "exact_request_counts": true,
+    "exact_input_output_token_counts": true,
+    "zero_request_errors": true,
+    "slurm_completed_zero_exit_for_valid_points": true,
+    "single_nvl72_domain_per_job": true,
+    "loading_heartbeat_stopped_before_kv_graph_warmup_formal": true,
+    "formal_window_clean": true,
+    "metrics_endpoint_requests": 0,
+    "jit_and_warmup_excluded": true,
+    "throughput_denominator": "all 16 serving GPUs"
+  },
+  "scope_limitations": {
+    "nomtp": "C2304 declined from C2048, so saturation is demonstrated within the tested tail.",
+    "mtp3": "The frozen TRTLLM5-derived ladder ends at C1024. C1024 rebounded within the independent curve but remained below the valid C640 maximum observation; values are the audited maximum and repeatable band within C384-C1024, not a mathematical proof over untested C>1024.",
+    "accuracy": "This is a serving-performance integrity report, not a substitute for a separate semantic accuracy campaign."
+  },
+  "source_reports": [
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/aggregate-v1-campaign-audit.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/mtp3-nochunk-causal-ab.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/nomtp-aggregate-max-screen.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/nomtp-budget-confirmation.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/mtp3-aggregate-max-screen.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/mtp3-static-confirmation.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/mtp3-budget33792-curve.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/mtp3-static33792-c640-repeat2.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/aggregate-kv-manager-v2-diagnostics.json",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/reports/disaggregate-best-client-oversample-retry2-audit.json"
+  ]
+}

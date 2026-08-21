@@ -1,0 +1,1670 @@
+{
+  "_copyright": "Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.",
+  "integrity_status": "pass",
+  "performance_status": "review-localized-differences",
+  "merge_policy": "No-MTP C1-C1280 use completed formal windows from the main sweeps; C1536-C2304 use COMPLETED tail jobs. Main sweep TIMEOUT occurred only after the accepted files and is retained in source provenance.",
+  "sources": {
+    "ll-nomtp": {
+      "arm": "ll-nomtp-v1",
+      "job": "525297",
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=2,cpu=288,gres/gpu=8,mem=1840G,node=2",
+        "nodes": "nvl72d100-T[14,17]",
+        "domain": "nvl72d100"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ll-nomtp-tp8-trtllm.yaml",
+      "recipe_sha256": "85dd89dfa8113c187b804bb6eceaa8712e20585ad2c24a923395a0f31b9de7cd",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/audit-formal-window.json",
+      "formal_window_count": 10,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512
+      ]
+    },
+    "ll-mtp3": {
+      "arm": "ll-mtp3-v1",
+      "job": "525298",
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=2,cpu=288,gres/gpu=8,mem=1840G,node=2",
+        "nodes": "nvl72d039-T[06,12]",
+        "domain": "nvl72d039"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ll-mtp3-tp8-trtllm.yaml",
+      "recipe_sha256": "274438bf3eb49d09165f85732fc847631339ec9a48e5755edde7d1c4503914da",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/audit-formal-window.json",
+      "formal_window_count": 10,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512
+      ]
+    },
+    "ht-nomtp-noeplb-main": {
+      "arm": "ht-nomtp-noeplb-v1",
+      "job": "525299",
+      "slurm": {
+        "state": "TIMEOUT",
+        "exit_code": "0:0",
+        "allocation": "billing=4,cpu=576,gres/gpu=16,mem=3680G,node=4",
+        "nodes": "nvl72d102-T[10-13]",
+        "domain": "nvl72d102",
+        "acceptance_scope": "completed result files only; later planned points excluded"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ht-nomtp-adp16-cutedsl-noeplb.yaml",
+      "recipe_sha256": "3dc09834201b1620e939bf74a22a2f90c47a57580e83752592cb9f7b36b06e0b",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/audit-formal-window-partial.json",
+      "formal_window_count": 15,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        768,
+        1024,
+        1280,
+        1536,
+        1792
+      ]
+    },
+    "ht-nomtp-noeplb-tail": {
+      "arm": "ht-nomtp-noeplb-tail-v1",
+      "job": "525325",
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=4,cpu=576,gres/gpu=16,mem=3680G,node=4",
+        "nodes": "nvl72d025-T[01-04]",
+        "domain": "nvl72d025"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ht-nomtp-adp16-cutedsl-noeplb-tail.yaml",
+      "recipe_sha256": "ce4085960d4fa68d0485e5757202bd6632d796c7522798c10bd287a22775b48c",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-tail-v1/525325/audit-formal-window.json",
+      "formal_window_count": 4,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1536,
+        1792,
+        2048,
+        2304
+      ]
+    },
+    "ht-nomtp-static-main": {
+      "arm": "ht-nomtp-static528-v1",
+      "job": "525300",
+      "slurm": {
+        "state": "TIMEOUT",
+        "exit_code": "0:0",
+        "allocation": "billing=4,cpu=576,gres/gpu=16,mem=3680G,node=4",
+        "nodes": "nvl72d051-T[09-10,12,15]",
+        "domain": "nvl72d051",
+        "acceptance_scope": "completed result files only; later planned points excluded"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ht-nomtp-adp16-cutedsl-static528.yaml",
+      "recipe_sha256": "11a127a8a700bc339c2a189e013c53f2b5687b711d1b8d534cb6cc9b36380469",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/audit-formal-window-partial.json",
+      "formal_window_count": 14,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        768,
+        1024,
+        1280,
+        1536
+      ]
+    },
+    "ht-nomtp-static-tail": {
+      "arm": "ht-nomtp-static528-tail-v1",
+      "job": "525326",
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=4,cpu=576,gres/gpu=16,mem=3680G,node=4",
+        "nodes": "nvl72d047-T[14-16,18]",
+        "domain": "nvl72d047"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ht-nomtp-adp16-cutedsl-static528-tail.yaml",
+      "recipe_sha256": "706c7dcfba2d375bb966703342e9d01048c05c3ec7a06314185b995e4afc25ed",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-tail-v1/525326/audit-formal-window.json",
+      "formal_window_count": 4,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1536,
+        1792,
+        2048,
+        2304
+      ]
+    },
+    "ht-mtp3-noeplb": {
+      "arm": "ht-mtp3-noeplb-v1",
+      "job": "525301",
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=4,cpu=576,gres/gpu=16,mem=3680G,node=4",
+        "nodes": "nvl72d061-T[03,05-07]",
+        "domain": "nvl72d061"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ht-mtp3-adp16-cutedsl-noeplb.yaml",
+      "recipe_sha256": "4ad028ad14bba03865ff1aeccad244ded820f0118b629acfa1f20df7ba4a9182",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/audit-formal-window.json",
+      "formal_window_count": 17,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        320,
+        384,
+        448,
+        512,
+        640,
+        768,
+        896,
+        1024
+      ]
+    },
+    "ht-mtp3-static": {
+      "arm": "ht-mtp3-static528-v1",
+      "job": "525302",
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=4,cpu=576,gres/gpu=16,mem=3680G,node=4",
+        "nodes": "nvl72d078-T[05,07-09]",
+        "domain": "nvl72d078"
+      },
+      "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/recipes/aggregate-ht-mtp3-adp16-cutedsl-static528.yaml",
+      "recipe_sha256": "4f8691fc03f446f1bfcd737f0a8f8489a29fb04c9241f31037c8c2a4a689781e",
+      "formal_report": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/audit-formal-window.json",
+      "formal_window_count": 17,
+      "metrics_hits": 0,
+      "result_concurrencies": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        320,
+        384,
+        448,
+        512,
+        640,
+        768,
+        896,
+        1024
+      ]
+    }
+  },
+  "curves": {
+    "ll-nomtp": {
+      "points": [
+        {
+          "concurrency": 1,
+          "planned_requests": 5,
+          "completed_requests": 5,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 147.48761400445994,
+          "median_ttft_ms": 301.46054399665445,
+          "median_tpot_ms": 7.308087272737731,
+          "duration_seconds": 39.05412694401457,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1_gpus_8.json",
+          "sha256": "ad51a40d0bf0d309095ac513461a1b5ce3dc2d04618426785cfba8c824b3b184"
+        },
+        {
+          "concurrency": 2,
+          "planned_requests": 10,
+          "completed_requests": 10,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 269.0580444009479,
+          "median_ttft_ms": 504.484320001211,
+          "median_tpot_ms": 7.833012488767034,
+          "duration_seconds": 42.81604003199027,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2_gpus_8.json",
+          "sha256": "b8e61d908be06452d08f2b02f11c3e7592a08b0d285169bc6e91d5bccce3572b"
+        },
+        {
+          "concurrency": 4,
+          "planned_requests": 20,
+          "completed_requests": 20,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 450.21721545579646,
+          "median_ttft_ms": 851.6760640050052,
+          "median_tpot_ms": 9.168216430107341,
+          "duration_seconds": 51.175297631998546,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_4_gpus_8.json",
+          "sha256": "2f3e1d1522a2a946adb76892f66c9da7f69c25c4bf51ddfdc8479251fa5f0018"
+        },
+        {
+          "concurrency": 8,
+          "planned_requests": 40,
+          "completed_requests": 40,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 702.2732204235142,
+          "median_ttft_ms": 1260.9727199887857,
+          "median_tpot_ms": 11.548186807426303,
+          "duration_seconds": 65.61548790399684,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_8_gpus_8.json",
+          "sha256": "25687273c6b6a027d790ac053e960c6f3d0077cc74796b3f65210906de9cf724"
+        },
+        {
+          "concurrency": 16,
+          "planned_requests": 80,
+          "completed_requests": 80,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1083.6841473535162,
+          "median_ttft_ms": 1338.0762399901869,
+          "median_tpot_ms": 15.251345188657476,
+          "duration_seconds": 85.04322982399026,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_16_gpus_8.json",
+          "sha256": "89198178a0219724c9c544a4e0d90b6e133bba21c6b4a0fd754405c08e4dce9e"
+        },
+        {
+          "concurrency": 32,
+          "planned_requests": 160,
+          "completed_requests": 160,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1507.845619579156,
+          "median_ttft_ms": 1331.8019999860553,
+          "median_tpot_ms": 22.53997829130326,
+          "duration_seconds": 122.24063100799685,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_32_gpus_8.json",
+          "sha256": "000f3d7d1a2933d18552b965ec78e03856c5e3d556280c4b432f2b4beeec5932"
+        },
+        {
+          "concurrency": 64,
+          "planned_requests": 320,
+          "completed_requests": 320,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1982.3758898630144,
+          "median_ttft_ms": 1090.4311839985894,
+          "median_tpot_ms": 34.9628205200553,
+          "duration_seconds": 185.95867811198696,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_64_gpus_8.json",
+          "sha256": "d679517ae80e079b62df0f21c6149429933e1938d2dbb6884040942d528598ac"
+        },
+        {
+          "concurrency": 128,
+          "planned_requests": 640,
+          "completed_requests": 640,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2403.2201520353515,
+          "median_ttft_ms": 1135.5844320059987,
+          "median_tpot_ms": 58.4555026862139,
+          "duration_seconds": 306.7883728320012,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_128_gpus_8.json",
+          "sha256": "56440c629ed560efb1fbabbed8a4e26d0093d70eb0b3d4a19b00f75491bd2691"
+        },
+        {
+          "concurrency": 256,
+          "planned_requests": 1280,
+          "completed_requests": 1280,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2411.646878402364,
+          "median_ttft_ms": 61488.381296003354,
+          "median_tpot_ms": 58.987268801560745,
+          "duration_seconds": 611.4327985599812,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_256_gpus_8.json",
+          "sha256": "11b8576a64afaee48e5682672bb133a88515d6a05bf8294350ce526ebfc7d4ae"
+        },
+        {
+          "concurrency": 512,
+          "planned_requests": 2560,
+          "completed_requests": 2560,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2411.780032695801,
+          "median_ttft_ms": 183498.89420799445,
+          "median_tpot_ms": 58.96444446531298,
+          "duration_seconds": 1222.7980827520078,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-nomtp-v1/525297/logs/sa-bench_isl_8192_osl_1024/results_concurrency_512_gpus_8.json",
+          "sha256": "8b4489774ffdba9f7c77807ca16a2dcc8381cf34b85bb78278153073da80f1d3"
+        }
+      ],
+      "peak": {
+        "concurrency": 512,
+        "total_tps_per_gpu": 2411.780032695801
+      },
+      "reference_comparisons": [
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 1,
+          "current_total_tps_per_gpu": 147.48761400445994,
+          "reference_total_tps_per_gpu": 142.96665323216118,
+          "change_percent": 3.1622484475154256,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 2,
+          "current_total_tps_per_gpu": 269.0580444009479,
+          "reference_total_tps_per_gpu": 263.0475055556451,
+          "change_percent": 2.284963255061667,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 4,
+          "current_total_tps_per_gpu": 450.21721545579646,
+          "reference_total_tps_per_gpu": 446.8626180122213,
+          "change_percent": 0.7506999485652699,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 8,
+          "current_total_tps_per_gpu": 702.2732204235142,
+          "reference_total_tps_per_gpu": 709.9790741623275,
+          "change_percent": -1.0853635014391183,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 16,
+          "current_total_tps_per_gpu": 1083.6841473535162,
+          "reference_total_tps_per_gpu": 1070.2154123344333,
+          "change_percent": 1.2585069196213494,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 32,
+          "current_total_tps_per_gpu": 1507.845619579156,
+          "reference_total_tps_per_gpu": 1439.9740142401822,
+          "change_percent": 4.713390982599575,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 64,
+          "current_total_tps_per_gpu": 1982.3758898630144,
+          "reference_total_tps_per_gpu": 1962.79189981425,
+          "change_percent": 0.9977619150872696,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 128,
+          "current_total_tps_per_gpu": 2403.2201520353515,
+          "reference_total_tps_per_gpu": 2372.921052581379,
+          "change_percent": 1.2768692587143304,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 256,
+          "current_total_tps_per_gpu": 2411.646878402364,
+          "reference_total_tps_per_gpu": 2381.3813225204813,
+          "change_percent": 1.2709243830739902,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-nomtp",
+          "concurrency": 512,
+          "current_total_tps_per_gpu": 2411.780032695801,
+          "reference_total_tps_per_gpu": 2404.352650564693,
+          "change_percent": 0.3089140076587116,
+          "status": "parity"
+        }
+      ]
+    },
+    "ll-mtp3": {
+      "points": [
+        {
+          "concurrency": 1,
+          "planned_requests": 5,
+          "completed_requests": 5,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 318.1102706030899,
+          "median_ttft_ms": 310.45443197945133,
+          "median_tpot_ms": 3.2263244887452505,
+          "duration_seconds": 18.106928736000555,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1_gpus_8.json",
+          "sha256": "0f6e78c14dacf9649e1a5688987868150c8a9655ead79df84af8fa5bc8cffdd6"
+        },
+        {
+          "concurrency": 2,
+          "planned_requests": 10,
+          "completed_requests": 10,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 533.5252214099665,
+          "median_ttft_ms": 519.592704004026,
+          "median_tpot_ms": 3.7027851417463844,
+          "duration_seconds": 21.592231327987975,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2_gpus_8.json",
+          "sha256": "8940b2eaa7a42e18ae83325c6627d64b40f5bcb5957fee9e343373391066ff87"
+        },
+        {
+          "concurrency": 4,
+          "planned_requests": 20,
+          "completed_requests": 20,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 847.8620111927315,
+          "median_ttft_ms": 798.6264159844723,
+          "median_tpot_ms": 4.490978080151832,
+          "duration_seconds": 27.174233183992328,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_4_gpus_8.json",
+          "sha256": "7519ae893640569bc9f4c0c7fcc5cdbce0bfef4df52f38e126092720600d8037"
+        },
+        {
+          "concurrency": 8,
+          "planned_requests": 40,
+          "completed_requests": 40,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1242.6270224972818,
+          "median_ttft_ms": 828.1204160011839,
+          "median_tpot_ms": 6.371917716525168,
+          "duration_seconds": 37.082728095992934,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_8_gpus_8.json",
+          "sha256": "10b0e44fcd8e3ff620cb60842cc302da50dc8ce76ea993693f6a83193a102f9f"
+        },
+        {
+          "concurrency": 16,
+          "planned_requests": 80,
+          "completed_requests": 80,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1718.5278532364036,
+          "median_ttft_ms": 1110.9969919925788,
+          "median_tpot_ms": 9.40997838516076,
+          "duration_seconds": 53.62729491200298,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_16_gpus_8.json",
+          "sha256": "73654f79de6fd65483cc2987210b9633bc77d4e5ecfd96c0f73b2f2cd1f24292"
+        },
+        {
+          "concurrency": 32,
+          "planned_requests": 160,
+          "completed_requests": 160,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2217.747077282246,
+          "median_ttft_ms": 1394.2684159992496,
+          "median_tpot_ms": 14.742987792767,
+          "duration_seconds": 83.11137094401056,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_32_gpus_8.json",
+          "sha256": "a1aff1d366d3ccfc1ff4a3717678899e9e9d74ea90f5662bb808fb4fb7e8b84d"
+        },
+        {
+          "concurrency": 64,
+          "planned_requests": 320,
+          "completed_requests": 320,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2611.116704297723,
+          "median_ttft_ms": 1425.8568320074119,
+          "median_tpot_ms": 25.552472117300514,
+          "duration_seconds": 141.18097417600802,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_64_gpus_8.json",
+          "sha256": "bf3082c51420c94c2ff652cab478d352ce82f885af229a26052ccfa93bb97d04"
+        },
+        {
+          "concurrency": 128,
+          "planned_requests": 640,
+          "completed_requests": 640,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 3073.541320320832,
+          "median_ttft_ms": 1497.1064960118383,
+          "median_tpot_ms": 44.54696498925498,
+          "duration_seconds": 239.87964473600732,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_128_gpus_8.json",
+          "sha256": "25fcca29398d88f638ae54b958527bcc0b8e901586f62961a35986c7bbd96958"
+        },
+        {
+          "concurrency": 256,
+          "planned_requests": 1280,
+          "completed_requests": 1280,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 3010.9450215595534,
+          "median_ttft_ms": 48672.00577601034,
+          "median_tpot_ms": 45.79521557770522,
+          "duration_seconds": 489.7332862080075,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_256_gpus_8.json",
+          "sha256": "f62a257d1f4dc2424a59d8aa087784293454ab972c6fb81d4055c5f9028a07c9"
+        },
+        {
+          "concurrency": 512,
+          "planned_requests": 2560,
+          "completed_requests": 2560,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 3071.499192363903,
+          "median_ttft_ms": 144140.91049600393,
+          "median_tpot_ms": 45.68206044965454,
+          "duration_seconds": 960.1565279039787,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ll-mtp3-v1/525298/logs/sa-bench_isl_8192_osl_1024/results_concurrency_512_gpus_8.json",
+          "sha256": "f30bc07364e6e1886bd5cbb1b496f9576e74de955d8fac01bbb6ac9c03c1c192"
+        }
+      ],
+      "peak": {
+        "concurrency": 128,
+        "total_tps_per_gpu": 3073.541320320832
+      },
+      "reference_comparisons": [
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 1,
+          "current_total_tps_per_gpu": 318.1102706030899,
+          "reference_total_tps_per_gpu": 308.11717391988947,
+          "change_percent": 3.2432780542763995,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 2,
+          "current_total_tps_per_gpu": 533.5252214099665,
+          "reference_total_tps_per_gpu": 603.9140893483697,
+          "change_percent": -11.655443908313767,
+          "status": "regression"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 4,
+          "current_total_tps_per_gpu": 847.8620111927315,
+          "reference_total_tps_per_gpu": 883.9649902001141,
+          "change_percent": -4.084209149415463,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 8,
+          "current_total_tps_per_gpu": 1242.6270224972818,
+          "reference_total_tps_per_gpu": 1273.218227057642,
+          "change_percent": -2.4026678153245773,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 16,
+          "current_total_tps_per_gpu": 1718.5278532364036,
+          "reference_total_tps_per_gpu": 1767.4090965939652,
+          "change_percent": -2.7657005642758192,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 32,
+          "current_total_tps_per_gpu": 2217.747077282246,
+          "reference_total_tps_per_gpu": 2186.869613559534,
+          "change_percent": 1.4119480892348824,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 64,
+          "current_total_tps_per_gpu": 2611.116704297723,
+          "reference_total_tps_per_gpu": 2662.400304300449,
+          "change_percent": -1.926216727059793,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 128,
+          "current_total_tps_per_gpu": 3073.541320320832,
+          "reference_total_tps_per_gpu": 2976.9560339687187,
+          "change_percent": 3.2444310648199526,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 256,
+          "current_total_tps_per_gpu": 3010.9450215595534,
+          "reference_total_tps_per_gpu": 3019.804998858102,
+          "change_percent": -0.2933956762737555,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ll-mtp3",
+          "concurrency": 512,
+          "current_total_tps_per_gpu": 3071.499192363903,
+          "reference_total_tps_per_gpu": 3027.2071701854743,
+          "change_percent": 1.463131516556082,
+          "status": "parity"
+        }
+      ]
+    },
+    "ht-nomtp-noeplb": {
+      "points": [
+        {
+          "concurrency": 1,
+          "planned_requests": 3,
+          "completed_requests": 3,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 22.897205953022016,
+          "median_ttft_ms": 1256.2468590040226,
+          "median_tpot_ms": 23.312854200410623,
+          "duration_seconds": 75.4677231599926,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1_gpus_16.json",
+          "sha256": "8955db2c88adf22d75176b67047daab7a089aabb29a77f29ab10b44e9785c7fc"
+        },
+        {
+          "concurrency": 2,
+          "planned_requests": 6,
+          "completed_requests": 6,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 42.522657402426155,
+          "median_ttft_ms": 2437.2971345001133,
+          "median_tpot_ms": 23.871353586022956,
+          "duration_seconds": 81.2743184719875,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2_gpus_16.json",
+          "sha256": "2c46af748a00a570825aecea68954de7cc71ca6ba82ca8af5159fdf6e7ab036e"
+        },
+        {
+          "concurrency": 4,
+          "planned_requests": 12,
+          "completed_requests": 12,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 82.7457990388594,
+          "median_ttft_ms": 2782.9223875014577,
+          "median_tpot_ms": 24.59497320185402,
+          "duration_seconds": 83.53294161500526,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_4_gpus_16.json",
+          "sha256": "283e785bfa058e3aa81053924af50f1d47846b69693a23c6fb180a2507b7c11e"
+        },
+        {
+          "concurrency": 8,
+          "planned_requests": 24,
+          "completed_requests": 24,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 162.8071526162527,
+          "median_ttft_ms": 2679.0891679993365,
+          "median_tpot_ms": 25.06081558847224,
+          "duration_seconds": 84.91027438201127,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_8_gpus_16.json",
+          "sha256": "f6c25f926b99762903389a4018bad362e5ae037840b410a80e3f1beab4b16448"
+        },
+        {
+          "concurrency": 16,
+          "planned_requests": 48,
+          "completed_requests": 48,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 319.23293111085025,
+          "median_ttft_ms": 2760.40549899335,
+          "median_tpot_ms": 25.562921154425677,
+          "duration_seconds": 86.60760625099647,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_16_gpus_16.json",
+          "sha256": "c299ef94b7d0d1b49c5f6b91022c1dd9d71de9490bca6570347f9867180f2985"
+        },
+        {
+          "concurrency": 32,
+          "planned_requests": 96,
+          "completed_requests": 96,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 541.2670447836911,
+          "median_ttft_ms": 2670.4903910140274,
+          "median_tpot_ms": 29.24093086216034,
+          "duration_seconds": 102.16029320997768,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_32_gpus_16.json",
+          "sha256": "07fb58ae34a8e89858f88f2df77b7ebae5093112bca1a5018877e9421c7cdfc4"
+        },
+        {
+          "concurrency": 64,
+          "planned_requests": 192,
+          "completed_requests": 192,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 993.4266432110838,
+          "median_ttft_ms": 4161.202827002853,
+          "median_tpot_ms": 31.415609504883236,
+          "duration_seconds": 111.32377086498309,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_64_gpus_16.json",
+          "sha256": "4f4c3a08bffef9870992f1d3f96cb6fe9ffa18bb26f74f5bec8a94ab522d1971"
+        },
+        {
+          "concurrency": 128,
+          "planned_requests": 384,
+          "completed_requests": 384,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1587.8445616048284,
+          "median_ttft_ms": 5339.42161151208,
+          "median_tpot_ms": 38.563872683763265,
+          "duration_seconds": 139.29826971000875,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_128_gpus_16.json",
+          "sha256": "b9aa8662077277cc313f452123c776801baca16a6444d1ffea3875647f1d5e1b"
+        },
+        {
+          "concurrency": 256,
+          "planned_requests": 768,
+          "completed_requests": 768,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2564.9634767957727,
+          "median_ttft_ms": 8116.150337504223,
+          "median_tpot_ms": 47.21220403227237,
+          "duration_seconds": 172.46561364398804,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_256_gpus_16.json",
+          "sha256": "7ed47ee47f10f333e6b3f3562502f7627e119dc84aa5195d9c453e495e56964c"
+        },
+        {
+          "concurrency": 512,
+          "planned_requests": 1536,
+          "completed_requests": 1536,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 3495.0572778589203,
+          "median_ttft_ms": 7976.958635495976,
+          "median_tpot_ms": 72.88471137682775,
+          "duration_seconds": 253.13919906399678,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_512_gpus_16.json",
+          "sha256": "320f3b802ddc078a10353c7f82ac7db0cad7e8684967384b36338494fe6d5835"
+        },
+        {
+          "concurrency": 768,
+          "planned_requests": 2304,
+          "completed_requests": 2304,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 4017.604812576225,
+          "median_ttft_ms": 8276.202986497083,
+          "median_tpot_ms": 98.39574755524501,
+          "duration_seconds": 330.32218496099813,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_768_gpus_16.json",
+          "sha256": "4116a509697e1f7c48f135c6ce8883d0631bee4f22fd4429c18adcfddc198dea"
+        },
+        {
+          "concurrency": 1024,
+          "planned_requests": 3072,
+          "completed_requests": 3072,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 4163.352012157171,
+          "median_ttft_ms": 10468.524579002406,
+          "median_tpot_ms": 127.33677514272385,
+          "duration_seconds": 425.01138381598867,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1024_gpus_16.json",
+          "sha256": "9638ee59b935ebb7e648b5950af0ac03c6c0444f8e566202bc3df0dbd32fec79"
+        },
+        {
+          "concurrency": 1280,
+          "planned_requests": 3840,
+          "completed_requests": 3840,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 4451.868657263125,
+          "median_ttft_ms": 7592.657239511027,
+          "median_tpot_ms": 150.90186355034047,
+          "duration_seconds": 496.8340645880089,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-v1/525299/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1280_gpus_16.json",
+          "sha256": "95c9886785f4568eea2b1daaf1f6e5f572bef223a46e7853530974938cf57cf3"
+        },
+        {
+          "concurrency": 1536,
+          "planned_requests": 4608,
+          "completed_requests": 4608,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 4802.822060271549,
+          "median_ttft_ms": 6903.271066010348,
+          "median_tpot_ms": 171.6527958690277,
+          "duration_seconds": 552.635089680989,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-tail-v1/525325/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_16.json",
+          "sha256": "ac5932de97478e69404aa0e90dde0fed0d91a6af8a6ab3d6ee23d1aac517aaed"
+        },
+        {
+          "concurrency": 1792,
+          "planned_requests": 5376,
+          "completed_requests": 5376,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 4933.497217131932,
+          "median_ttft_ms": 8348.859942503623,
+          "median_tpot_ms": 195.02338904936428,
+          "duration_seconds": 627.6634735389962,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-tail-v1/525325/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1792_gpus_16.json",
+          "sha256": "4cf508dec138ee67205c4e1a71daa416b886ec9f759f112ef13acf5a55359f0a"
+        },
+        {
+          "concurrency": 2048,
+          "planned_requests": 6144,
+          "completed_requests": 6144,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 4984.075778360016,
+          "median_ttft_ms": 5645.616292997147,
+          "median_tpot_ms": 223.5306936598354,
+          "duration_seconds": 710.0501993499929,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-tail-v1/525325/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2048_gpus_16.json",
+          "sha256": "d6cdb007d95da35adc4b7878c1f1978ac8a4bbef739c5ca4392904c072eb9179"
+        },
+        {
+          "concurrency": 2304,
+          "planned_requests": 6912,
+          "completed_requests": 6912,
+          "empty_decoded_texts": 2,
+          "total_tps_per_gpu": 4912.903666847985,
+          "median_ttft_ms": 25408.580520001124,
+          "median_tpot_ms": 225.70625325072675,
+          "duration_seconds": 810.3786009210162,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-noeplb-tail-v1/525325/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2304_gpus_16.json",
+          "sha256": "b97750fe563d30a472445408a448ec9cfd02cdf2de5a5210a28c36996f8313db"
+        }
+      ],
+      "peak": {
+        "concurrency": 2048,
+        "total_tps_per_gpu": 4984.075778360016
+      },
+      "reference_comparisons": [
+        {
+          "reference_label": "ht-nomtp-noeplb",
+          "concurrency": 1536,
+          "current_total_tps_per_gpu": 4802.822060271549,
+          "reference_total_tps_per_gpu": 4797.674861556696,
+          "change_percent": 0.10728527595935677,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-nomtp-noeplb",
+          "concurrency": 1792,
+          "current_total_tps_per_gpu": 4933.497217131932,
+          "reference_total_tps_per_gpu": 4912.97095869427,
+          "change_percent": 0.41779726789017424,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-nomtp-noeplb",
+          "concurrency": 2048,
+          "current_total_tps_per_gpu": 4984.075778360016,
+          "reference_total_tps_per_gpu": 4940.091372987617,
+          "change_percent": 0.8903561098668078,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-nomtp-noeplb",
+          "concurrency": 2304,
+          "current_total_tps_per_gpu": 4912.903666847985,
+          "reference_total_tps_per_gpu": 4876.871164611253,
+          "change_percent": 0.7388446612696997,
+          "status": "parity"
+        }
+      ]
+    },
+    "ht-nomtp-static528": {
+      "points": [
+        {
+          "concurrency": 1,
+          "planned_requests": 3,
+          "completed_requests": 3,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 22.05502039853086,
+          "median_ttft_ms": 1305.868552008178,
+          "median_tpot_ms": 24.041839561113118,
+          "duration_seconds": 78.34950812900206,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1_gpus_16.json",
+          "sha256": "a05b0dc7c65ffd907f32ff3154d2d1f8a9731c468a0ced4bb8d07c879e745c55"
+        },
+        {
+          "concurrency": 2,
+          "planned_requests": 6,
+          "completed_requests": 6,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 41.92142671982237,
+          "median_ttft_ms": 2520.3198340022936,
+          "median_tpot_ms": 24.365936732158623,
+          "duration_seconds": 82.4399423020077,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2_gpus_16.json",
+          "sha256": "1792036a5b479f713ceda2a31af8de4d540e78f6d2053a62714c6f434a089acb"
+        },
+        {
+          "concurrency": 4,
+          "planned_requests": 12,
+          "completed_requests": 12,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 80.99990378002921,
+          "median_ttft_ms": 2662.3299834900536,
+          "median_tpot_ms": 25.104904641743357,
+          "duration_seconds": 85.33343470099499,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_4_gpus_16.json",
+          "sha256": "605bc022c6d60629e65f289752d8c073f15271c9f24931894fe49ceed6dcee95"
+        },
+        {
+          "concurrency": 8,
+          "planned_requests": 24,
+          "completed_requests": 24,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 160.40619091996678,
+          "median_ttft_ms": 2537.710148986662,
+          "median_tpot_ms": 25.47980033333267,
+          "duration_seconds": 86.18121233797865,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_8_gpus_16.json",
+          "sha256": "192f115d4467e63e3a20546280062e411b30982916925040d6b926228f0bae24"
+        },
+        {
+          "concurrency": 16,
+          "planned_requests": 48,
+          "completed_requests": 48,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 309.2320310819707,
+          "median_ttft_ms": 2671.702270512469,
+          "median_tpot_ms": 25.96391907479523,
+          "duration_seconds": 89.40859038199414,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_16_gpus_16.json",
+          "sha256": "e2c58379593b123ba85e5b128c9b13d837b98c8fd1424ba16b99237b9894d843"
+        },
+        {
+          "concurrency": 32,
+          "planned_requests": 96,
+          "completed_requests": 96,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 536.180838978617,
+          "median_ttft_ms": 2889.445649503614,
+          "median_tpot_ms": 29.433239504888626,
+          "duration_seconds": 103.12938467800268,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_32_gpus_16.json",
+          "sha256": "20030d8fade1b1eadfede30cc8a93998767a3f20846489bf28bbbdb7a8e84699"
+        },
+        {
+          "concurrency": 64,
+          "planned_requests": 192,
+          "completed_requests": 192,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 939.1260474148254,
+          "median_ttft_ms": 4349.018306005746,
+          "median_tpot_ms": 32.00394938075036,
+          "duration_seconds": 117.76055014599115,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_64_gpus_16.json",
+          "sha256": "e017d38fbe21e524c890819513b12f5356ca461b3583d5b9d0b6292eb154efce"
+        },
+        {
+          "concurrency": 128,
+          "planned_requests": 384,
+          "completed_requests": 384,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1543.4333645723884,
+          "median_ttft_ms": 5971.431679499801,
+          "median_tpot_ms": 38.90723299411435,
+          "duration_seconds": 143.3064783209993,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_128_gpus_16.json",
+          "sha256": "82c5deb390f09ce78ebaddefd006bf560cc33fd5abe9f9d8b6b352986a7781cc"
+        },
+        {
+          "concurrency": 256,
+          "planned_requests": 768,
+          "completed_requests": 768,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2424.6541166305715,
+          "median_ttft_ms": 9332.07000650873,
+          "median_tpot_ms": 49.3426533123282,
+          "duration_seconds": 182.445816484018,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_256_gpus_16.json",
+          "sha256": "a8e2ba8ddaca062704cda973f81ef8dafc764f08191be9706cc2805a5571a814"
+        },
+        {
+          "concurrency": 512,
+          "planned_requests": 1536,
+          "completed_requests": 1536,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 3304.799154490341,
+          "median_ttft_ms": 8491.726431020652,
+          "median_tpot_ms": 77.47878822825079,
+          "duration_seconds": 267.71248679299606,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_512_gpus_16.json",
+          "sha256": "10e571bffcb9d4045aa6a8e6bee288e8cb24f11444172c84b576a5e4b792f05c"
+        },
+        {
+          "concurrency": 768,
+          "planned_requests": 2304,
+          "completed_requests": 2304,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 3733.9533476433626,
+          "median_ttft_ms": 9156.505978477071,
+          "median_tpot_ms": 105.80927251319741,
+          "duration_seconds": 355.41526003199397,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_768_gpus_16.json",
+          "sha256": "c7db8316bf61e3fda921707b3bd86bc0b49aca4a08a64d2292014850e91d0106"
+        },
+        {
+          "concurrency": 1024,
+          "planned_requests": 3072,
+          "completed_requests": 3072,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 4009.896629960783,
+          "median_ttft_ms": 8293.245310502243,
+          "median_tpot_ms": 133.91315777811852,
+          "duration_seconds": 441.27621315198485,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1024_gpus_16.json",
+          "sha256": "a798dcdcd6352b6211f9ec72939d7afcf850184bde147afa97ac5c9269cb6967"
+        },
+        {
+          "concurrency": 1280,
+          "planned_requests": 3840,
+          "completed_requests": 3840,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 4216.390387755794,
+          "median_ttft_ms": 8153.879660516395,
+          "median_tpot_ms": 159.9194307956992,
+          "duration_seconds": 524.581406509009,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-v1/525300/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1280_gpus_16.json",
+          "sha256": "23c020c7d63f6a95ddba800fe9ba58a6d40fa8c7387bf73cec35bdc6e9a0cf16"
+        },
+        {
+          "concurrency": 1536,
+          "planned_requests": 4608,
+          "completed_requests": 4608,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 5303.117254677737,
+          "median_ttft_ms": 5935.8381554920925,
+          "median_tpot_ms": 154.5871990449748,
+          "duration_seconds": 500.4995877959882,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-tail-v1/525326/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1536_gpus_16.json",
+          "sha256": "81aa21f36751b14d53cf33dad191b47e57f974c3dcf612f9ef83af1abd0efbfd"
+        },
+        {
+          "concurrency": 1792,
+          "planned_requests": 5376,
+          "completed_requests": 5376,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 5479.858150581742,
+          "median_ttft_ms": 7173.59359600232,
+          "median_tpot_ms": 175.61505762658757,
+          "duration_seconds": 565.0832402789965,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-tail-v1/525326/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1792_gpus_16.json",
+          "sha256": "522bb55431d24f86923d87a5b4253498ffd5428e15687ce376cd208d9173a08e"
+        },
+        {
+          "concurrency": 2048,
+          "planned_requests": 6144,
+          "completed_requests": 6144,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 5506.879473376571,
+          "median_ttft_ms": 4877.674556497368,
+          "median_tpot_ms": 201.5286486260791,
+          "duration_seconds": 642.6405402749951,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-tail-v1/525326/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2048_gpus_16.json",
+          "sha256": "8d334ffc1a1d6367ce05614012cb4bc8ef40f4431a5f448c398ad8b2d4f710e1"
+        },
+        {
+          "concurrency": 2304,
+          "planned_requests": 6912,
+          "completed_requests": 6912,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 5404.7871262751005,
+          "median_ttft_ms": 22119.46199000522,
+          "median_tpot_ms": 203.0011916309841,
+          "duration_seconds": 736.6269766009937,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-nomtp-static528-tail-v1/525326/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2304_gpus_16.json",
+          "sha256": "942f385a494c682a17b81a4fb13ed31ced547bb36fcdb07834f7a5df5d5f11ab"
+        }
+      ],
+      "peak": {
+        "concurrency": 2048,
+        "total_tps_per_gpu": 5506.879473376571
+      },
+      "reference_comparisons": [
+        {
+          "reference_label": "ht-nomtp-static528",
+          "concurrency": 2048,
+          "current_total_tps_per_gpu": 5506.879473376571,
+          "reference_total_tps_per_gpu": 5476.81095087283,
+          "change_percent": 0.5490151618059436,
+          "status": "parity"
+        }
+      ]
+    },
+    "ht-mtp3-noeplb": {
+      "points": [
+        {
+          "concurrency": 1,
+          "planned_requests": 3,
+          "completed_requests": 3,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 54.14495545853539,
+          "median_ttft_ms": 2195.6117379886564,
+          "median_tpot_ms": 8.219852586515122,
+          "duration_seconds": 31.914330436993623,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1_gpus_16.json",
+          "sha256": "c51f699550800cd219fb738b0e71c98513850be59311558e69dc731e585a5e95"
+        },
+        {
+          "concurrency": 2,
+          "planned_requests": 6,
+          "completed_requests": 6,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 103.00968936351858,
+          "median_ttft_ms": 2517.3509614978684,
+          "median_tpot_ms": 8.376102927190393,
+          "duration_seconds": 33.55024193698773,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2_gpus_16.json",
+          "sha256": "09f0a20f62a3c8da3915066207621da668d1a0a278a0ccba60e78b9156443e80"
+        },
+        {
+          "concurrency": 4,
+          "planned_requests": 12,
+          "completed_requests": 12,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 204.50236785371473,
+          "median_ttft_ms": 2523.134214003221,
+          "median_tpot_ms": 8.52010792521234,
+          "duration_seconds": 33.799119650997454,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_4_gpus_16.json",
+          "sha256": "cb80121fae15bbda28e6087ace92f821f949622f99b68ae3f16d2f09e46001ac"
+        },
+        {
+          "concurrency": 8,
+          "planned_requests": 24,
+          "completed_requests": 24,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 395.3909889527211,
+          "median_ttft_ms": 2530.134325483232,
+          "median_tpot_ms": 8.818130300085326,
+          "duration_seconds": 34.96286052602227,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_8_gpus_16.json",
+          "sha256": "e51a134dd8115add570c944303f91f8c587ea108f460c84eb4a0b9bf9beedb87"
+        },
+        {
+          "concurrency": 16,
+          "planned_requests": 48,
+          "completed_requests": 48,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 758.801704605316,
+          "median_ttft_ms": 2917.9142780049006,
+          "median_tpot_ms": 8.897971942330521,
+          "duration_seconds": 36.436396798002534,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_16_gpus_16.json",
+          "sha256": "d1bca9d8be1aede5ba2d5469bfc0a8cf38dcd7f050402cd3d15f3346a8f42f48"
+        },
+        {
+          "concurrency": 32,
+          "planned_requests": 96,
+          "completed_requests": 96,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1070.491869968817,
+          "median_ttft_ms": 3948.566139501054,
+          "median_tpot_ms": 12.104577055230635,
+          "duration_seconds": 51.65475941597833,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_32_gpus_16.json",
+          "sha256": "22387563d5d6e69626262e825d0ab386b2fabbc3586344fa96096d8419f62335"
+        },
+        {
+          "concurrency": 64,
+          "planned_requests": 192,
+          "completed_requests": 192,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1592.5760104360647,
+          "median_ttft_ms": 4481.058931502048,
+          "median_tpot_ms": 16.956531858747187,
+          "duration_seconds": 69.44221140799345,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_64_gpus_16.json",
+          "sha256": "30229991692c831cabf2e75ba5e367b40c176accf6f09532dda3871826a604e2"
+        },
+        {
+          "concurrency": 128,
+          "planned_requests": 384,
+          "completed_requests": 384,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2143.1231094863,
+          "median_ttft_ms": 6711.141555497306,
+          "median_tpot_ms": 25.748906164226497,
+          "duration_seconds": 103.20639025399578,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_128_gpus_16.json",
+          "sha256": "29a0aad3ad5216d84f5af3d27906af72bd4c261a4cf01869f386fbbc825688c2"
+        },
+        {
+          "concurrency": 256,
+          "planned_requests": 768,
+          "completed_requests": 768,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2688.313108418252,
+          "median_ttft_ms": 6025.310847500805,
+          "median_tpot_ms": 45.752432984856995,
+          "duration_seconds": 164.55226090099313,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_256_gpus_16.json",
+          "sha256": "24aa6f749c80a7559d594e85aade3136e06b9ef3f3790bf427a4ca2c4951c012"
+        },
+        {
+          "concurrency": 320,
+          "planned_requests": 960,
+          "completed_requests": 960,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2724.7453363113827,
+          "median_ttft_ms": 5877.993311994942,
+          "median_tpot_ms": 57.15756426980256,
+          "duration_seconds": 202.94006659300067,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_320_gpus_16.json",
+          "sha256": "1575df0e741db20ab7351e689753722bdad16710b2420b6bfa7a2917940f8cc7"
+        },
+        {
+          "concurrency": 384,
+          "planned_requests": 1152,
+          "completed_requests": 1152,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2781.192178390957,
+          "median_ttft_ms": 7048.683178509236,
+          "median_tpot_ms": 67.05523826834123,
+          "duration_seconds": 238.58545452399994,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_384_gpus_16.json",
+          "sha256": "bcb9f9bcc885c1b76ee916ff28cdd19020fde76f9fdcdd5f4ebc71eeb84c727f"
+        },
+        {
+          "concurrency": 448,
+          "planned_requests": 1344,
+          "completed_requests": 1344,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2790.409156386544,
+          "median_ttft_ms": 7945.094148497446,
+          "median_tpot_ms": 79.34298036314019,
+          "duration_seconds": 277.43028230400523,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_448_gpus_16.json",
+          "sha256": "9fedbfeef1ef70d3ee07087cab01efb0a15d649dd02c59cc13b32b0270118a9b"
+        },
+        {
+          "concurrency": 512,
+          "planned_requests": 1536,
+          "completed_requests": 1536,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2839.546777155565,
+          "median_ttft_ms": 8613.25010152359,
+          "median_tpot_ms": 88.07051584896912,
+          "duration_seconds": 311.57648365499335,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_512_gpus_16.json",
+          "sha256": "c29990edb47a482e9b75ca26a137577851bee3750f4f4081465db71148e644ac"
+        },
+        {
+          "concurrency": 640,
+          "planned_requests": 1920,
+          "completed_requests": 1920,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2848.601366583484,
+          "median_ttft_ms": 31220.824583506328,
+          "median_tpot_ms": 91.17916756891817,
+          "duration_seconds": 388.23262987000635,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_640_gpus_16.json",
+          "sha256": "e47e96352ce747d7c547d9f8d3011f15ab8a4636c7c016b3f0c848e90362a3ca"
+        },
+        {
+          "concurrency": 768,
+          "planned_requests": 2304,
+          "completed_requests": 2304,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2847.694089700472,
+          "median_ttft_ms": 55992.06235699239,
+          "median_tpot_ms": 92.58146049120924,
+          "duration_seconds": 466.02758519598865,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_768_gpus_16.json",
+          "sha256": "8252455fac25494546ae93721bbb3e56fa64ed25a014f64b3d65a04189368485"
+        },
+        {
+          "concurrency": 896,
+          "planned_requests": 2688,
+          "completed_requests": 2688,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2796.177765556705,
+          "median_ttft_ms": 83208.58578298066,
+          "median_tpot_ms": 93.78941403714704,
+          "duration_seconds": 553.7158685230243,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_896_gpus_16.json",
+          "sha256": "06c5339968daff43233e678ee4f9af6eaa2f88df60ecf598a48c6104bf227c36"
+        },
+        {
+          "concurrency": 1024,
+          "planned_requests": 3072,
+          "completed_requests": 3072,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2875.022533631823,
+          "median_ttft_ms": 106795.72015450685,
+          "median_tpot_ms": 93.12929448338552,
+          "duration_seconds": 615.4636978670023,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-noeplb-v1/525301/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1024_gpus_16.json",
+          "sha256": "8c09669990b4239f294c78740fff927c3cf0294e12a4260f9738838f6cf3bf6a"
+        }
+      ],
+      "peak": {
+        "concurrency": 1024,
+        "total_tps_per_gpu": 2875.022533631823
+      },
+      "reference_comparisons": [
+        {
+          "reference_label": "ht-mtp3-noeplb-main",
+          "concurrency": 256,
+          "current_total_tps_per_gpu": 2688.313108418252,
+          "reference_total_tps_per_gpu": 2610.129342627281,
+          "change_percent": 2.9953981403953556,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-main",
+          "concurrency": 320,
+          "current_total_tps_per_gpu": 2724.7453363113827,
+          "reference_total_tps_per_gpu": 2797.8657595443206,
+          "change_percent": -2.61343572269338,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-main",
+          "concurrency": 384,
+          "current_total_tps_per_gpu": 2781.192178390957,
+          "reference_total_tps_per_gpu": 2932.8041057397495,
+          "change_percent": -5.169521109578201,
+          "status": "regression"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-main",
+          "concurrency": 448,
+          "current_total_tps_per_gpu": 2790.409156386544,
+          "reference_total_tps_per_gpu": 2936.569586763457,
+          "change_percent": -4.977250702170622,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-main",
+          "concurrency": 512,
+          "current_total_tps_per_gpu": 2839.546777155565,
+          "reference_total_tps_per_gpu": 2952.5101037322756,
+          "change_percent": -3.8260098224190076,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-main",
+          "concurrency": 640,
+          "current_total_tps_per_gpu": 2848.601366583484,
+          "reference_total_tps_per_gpu": 2961.4969718006405,
+          "change_percent": -3.8121128028205997,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-tail",
+          "concurrency": 768,
+          "current_total_tps_per_gpu": 2847.694089700472,
+          "reference_total_tps_per_gpu": 2912.15395640996,
+          "change_percent": -2.213477298053035,
+          "status": "parity"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-tail",
+          "concurrency": 896,
+          "current_total_tps_per_gpu": 2796.177765556705,
+          "reference_total_tps_per_gpu": 2953.4693920459067,
+          "change_percent": -5.3256562235860505,
+          "status": "regression"
+        },
+        {
+          "reference_label": "ht-mtp3-noeplb-tail",
+          "concurrency": 1024,
+          "current_total_tps_per_gpu": 2875.022533631823,
+          "reference_total_tps_per_gpu": 2815.5258649514226,
+          "change_percent": 2.1131636338715287,
+          "status": "parity"
+        }
+      ]
+    },
+    "ht-mtp3-static528": {
+      "points": [
+        {
+          "concurrency": 1,
+          "planned_requests": 3,
+          "completed_requests": 3,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 52.61428356251484,
+          "median_ttft_ms": 2291.5469209838193,
+          "median_tpot_ms": 8.458941257102433,
+          "duration_seconds": 32.842792545998236,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1_gpus_16.json",
+          "sha256": "f49effbaea8d1ffdf686692a1e4bf90c173a1e58681191550ae52ac820799408"
+        },
+        {
+          "concurrency": 2,
+          "planned_requests": 6,
+          "completed_requests": 6,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 102.25022246534989,
+          "median_ttft_ms": 2517.915302494657,
+          "median_tpot_ms": 8.572937285924514,
+          "duration_seconds": 33.799437465000665,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_2_gpus_16.json",
+          "sha256": "dbe8ea32815a12070e348bf59a7a27a547de6238b7d12223bd05912cc4f02c1f"
+        },
+        {
+          "concurrency": 4,
+          "planned_requests": 12,
+          "completed_requests": 12,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 195.6627819673271,
+          "median_ttft_ms": 2834.4624915043823,
+          "median_tpot_ms": 8.755082253177008,
+          "duration_seconds": 35.32608465699013,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_4_gpus_16.json",
+          "sha256": "d000826a4f3b3cc8a232f09c531fd89b0fdf8c066014c423509769c336d105ac"
+        },
+        {
+          "concurrency": 8,
+          "planned_requests": 24,
+          "completed_requests": 24,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 386.7559551035,
+          "median_ttft_ms": 2602.836320977076,
+          "median_tpot_ms": 9.041811082117716,
+          "duration_seconds": 35.74347031398793,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_8_gpus_16.json",
+          "sha256": "fde473dd2158aaa37a4034238dd9f805fc34a2d61ea9e0feec34787b93488b4b"
+        },
+        {
+          "concurrency": 16,
+          "planned_requests": 48,
+          "completed_requests": 48,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 760.3370653223551,
+          "median_ttft_ms": 2593.9771799894515,
+          "median_tpot_ms": 9.234439766369393,
+          "duration_seconds": 36.362820203008596,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_16_gpus_16.json",
+          "sha256": "fa1cb1df5c004c655ed1a9796fdbfdcf979d7f4adedecde6ccfdf0a83c6ae22a"
+        },
+        {
+          "concurrency": 32,
+          "planned_requests": 96,
+          "completed_requests": 96,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1041.173627014815,
+          "median_ttft_ms": 4009.303301485488,
+          "median_tpot_ms": 12.496589737050309,
+          "duration_seconds": 53.1092975900101,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_32_gpus_16.json",
+          "sha256": "0bd48bd9c7c78449910c3142286c0902dd403496c2ce02363dfcda90e1a7fbc7"
+        },
+        {
+          "concurrency": 64,
+          "planned_requests": 192,
+          "completed_requests": 192,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 1580.73532201233,
+          "median_ttft_ms": 4485.928256995976,
+          "median_tpot_ms": 17.006084907125476,
+          "duration_seconds": 69.9623766610166,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_64_gpus_16.json",
+          "sha256": "a959ae82fdf96e7db679b2dfcd377cc09e50b3ddc76ac0152fe2adaa3d5b31fc"
+        },
+        {
+          "concurrency": 128,
+          "planned_requests": 384,
+          "completed_requests": 384,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2134.9829920455036,
+          "median_ttft_ms": 6145.462994012632,
+          "median_tpot_ms": 25.53553142911347,
+          "duration_seconds": 103.59988853498362,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_128_gpus_16.json",
+          "sha256": "eace2ef7dca9b5fe64a77ff67531aad01065c3d51b90ae6f6890846957b12239"
+        },
+        {
+          "concurrency": 256,
+          "planned_requests": 768,
+          "completed_requests": 768,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2590.0129616071067,
+          "median_ttft_ms": 5915.978693999932,
+          "median_tpot_ms": 46.179571409569434,
+          "duration_seconds": 170.7976008450205,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_256_gpus_16.json",
+          "sha256": "c9feaaf283a871785bae34398776a8044b7e8bed954ece4bfeca5cb21d8d8964"
+        },
+        {
+          "concurrency": 320,
+          "planned_requests": 960,
+          "completed_requests": 960,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2693.2710044757214,
+          "median_ttft_ms": 6287.913714491879,
+          "median_tpot_ms": 56.70929924633972,
+          "duration_seconds": 205.31168199601234,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_320_gpus_16.json",
+          "sha256": "83c2968d4097a57bb986db5a5d8c5d01f06cce71da4984e827464a924d01a380"
+        },
+        {
+          "concurrency": 384,
+          "planned_requests": 1152,
+          "completed_requests": 1152,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2814.0201501458487,
+          "median_ttft_ms": 6557.712145498954,
+          "median_tpot_ms": 66.5168720361669,
+          "duration_seconds": 235.80214944999898,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_384_gpus_16.json",
+          "sha256": "80ce84f4a612adc139302ef39663889fa72658f336cba5e24b1e3996aea4b8b9"
+        },
+        {
+          "concurrency": 448,
+          "planned_requests": 1344,
+          "completed_requests": 1344,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2772.05926246613,
+          "median_ttft_ms": 7923.082059001899,
+          "median_tpot_ms": 78.55235077125234,
+          "duration_seconds": 279.26675684101065,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_448_gpus_16.json",
+          "sha256": "c5049136ec12cf729e8206a4f23f0dca37b2a28424e8bb66773399ccae12abc3"
+        },
+        {
+          "concurrency": 512,
+          "planned_requests": 1536,
+          "completed_requests": 1536,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2878.7848433548374,
+          "median_ttft_ms": 8008.363464003196,
+          "median_tpot_ms": 87.04055970969277,
+          "duration_seconds": 307.32967142100097,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_512_gpus_16.json",
+          "sha256": "34852ef64e587e4402889b600b6c1d0ac56468aae3a437c76f2932e60abdf3bd"
+        },
+        {
+          "concurrency": 640,
+          "planned_requests": 1920,
+          "completed_requests": 1920,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2852.488343018863,
+          "median_ttft_ms": 31072.705408994807,
+          "median_tpot_ms": 90.62626576589096,
+          "duration_seconds": 387.70360015900224,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_640_gpus_16.json",
+          "sha256": "8d395ce5055c4c33b6126a303eb720e281b291dd7a3e30a7667dc5f807f10cbe"
+        },
+        {
+          "concurrency": 768,
+          "planned_requests": 2304,
+          "completed_requests": 2304,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2840.314084461794,
+          "median_ttft_ms": 56477.221400506096,
+          "median_tpot_ms": 93.26719209874543,
+          "duration_seconds": 467.23846748500364,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_768_gpus_16.json",
+          "sha256": "803b0dd50a17d7dc143ae429dd76e28e6dd2f5bc0d6e2acdd222fd1dde16fbc9"
+        },
+        {
+          "concurrency": 896,
+          "planned_requests": 2688,
+          "completed_requests": 2688,
+          "empty_decoded_texts": 0,
+          "total_tps_per_gpu": 2833.153135591738,
+          "median_ttft_ms": 81435.4777444969,
+          "median_tpot_ms": 93.78580859726165,
+          "duration_seconds": 546.4893445220077,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_896_gpus_16.json",
+          "sha256": "85867e631ea135b57147513730dcd87453243c9ff5223d6b98d09bff8784b095"
+        },
+        {
+          "concurrency": 1024,
+          "planned_requests": 3072,
+          "completed_requests": 3072,
+          "empty_decoded_texts": 1,
+          "total_tps_per_gpu": 2828.8627148938963,
+          "median_ttft_ms": 106673.6734855076,
+          "median_tpot_ms": 93.83715565640362,
+          "duration_seconds": 625.5064944239857,
+          "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/ht-mtp3-static528-v1/525302/logs/sa-bench_isl_8192_osl_1024/results_concurrency_1024_gpus_16.json",
+          "sha256": "c0c76bcb3b40996e288260369fb385f59d09d3c276e26c9e61ca63f2525cfeea"
+        }
+      ],
+      "peak": {
+        "concurrency": 512,
+        "total_tps_per_gpu": 2878.7848433548374
+      },
+      "reference_comparisons": [
+        {
+          "reference_label": "ht-mtp3-static528",
+          "concurrency": 640,
+          "current_total_tps_per_gpu": 2852.488343018863,
+          "reference_total_tps_per_gpu": 2617.2201964109904,
+          "change_percent": 8.989237777184256,
+          "status": "improvement"
+        }
+      ]
+    }
+  },
+  "repeatability": [
+    {
+      "arm": "ht-nomtp-noeplb",
+      "concurrency": 1536,
+      "main_total_tps_per_gpu": 4601.141624350486,
+      "tail_total_tps_per_gpu": 4802.822060271549,
+      "tail_vs_main_percent": 4.383269466293216
+    },
+    {
+      "arm": "ht-nomtp-noeplb",
+      "concurrency": 1792,
+      "main_total_tps_per_gpu": 4707.807241001272,
+      "tail_total_tps_per_gpu": 4933.497217131932,
+      "tail_vs_main_percent": 4.793951081197201
+    },
+    {
+      "arm": "ht-nomtp-static",
+      "concurrency": 1536,
+      "main_total_tps_per_gpu": 4404.879829406581,
+      "tail_total_tps_per_gpu": 5303.117254677737,
+      "tail_vs_main_percent": 20.391871289532215
+    }
+  ],
+  "eplb_peak_effect": {
+    "nomtp_static_vs_noeplb_percent": 10.48948126524234,
+    "mtp3_static_vs_noeplb_percent": 0.1308619212198492
+  }
+}

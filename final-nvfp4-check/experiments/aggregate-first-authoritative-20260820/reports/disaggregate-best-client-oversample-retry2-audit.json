@@ -1,0 +1,89 @@
+{
+  "_copyright": "Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.",
+  "integrity_status": "pass",
+  "performance_status": "pass",
+  "arms": [
+    {
+      "mode": "nomtp",
+      "job": "526474",
+      "output": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/disaggregate/nomtp-best-noeplb-client-oversample-retry2",
+      "reference_job": "500677",
+      "reference_total_tps_per_gpu": 5321.71073599,
+      "change_percent": 0.36253596046684766,
+      "parity_threshold_percent": 5.0,
+      "performance_status": "pass",
+      "no_metrics_requests": 0,
+      "heartbeat": {
+        "state": "stopped",
+        "supervisor_alive": "no",
+        "total_tasks": "40",
+        "stop_reason": "automatic model-loading boundary matched"
+      },
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=10,cpu=1440,gres/gpu=40,mem=9200G,node=10",
+        "nodes": "nvl72d031-T[01-03,07-08,11-15]",
+        "domain": "nvl72d031"
+      },
+      "result": {
+        "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/disaggregate/nomtp-best-noeplb-client-oversample-retry2/concurrency_1536/result.json",
+        "sha256": "a29257a22e56abf84046a2bd906627c3eca2838e44da50b9501f6e98ed82c3ee",
+        "concurrency": 1536,
+        "rounds": 24,
+        "planned_requests": 36864,
+        "dataset_records": 4096,
+        "client_oversample_expected": true,
+        "expected_completed_requests": 36864,
+        "completed_requests": 36864,
+        "duration_seconds": 1590.2376850409782,
+        "total_tps": 213640.15404479954,
+        "total_tps_per_gpu": 5341.003851119988,
+        "median_ttft_ms": 14234.443194494816,
+        "median_tpot_ms": 49.249649590923916,
+        "mean_accepted_length": 1.0
+      }
+    },
+    {
+      "mode": "mtp3",
+      "job": "526475",
+      "output": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/disaggregate/mtp3-best-noeplb-client-oversample-retry2",
+      "reference_job": "524759",
+      "reference_total_tps_per_gpu": 5296.636804728,
+      "change_percent": 0.030462580919676796,
+      "parity_threshold_percent": 5.0,
+      "performance_status": "pass",
+      "no_metrics_requests": 0,
+      "heartbeat": {
+        "state": "stopped",
+        "supervisor_alive": "no",
+        "total_tasks": "48",
+        "stop_reason": "automatic model-loading boundary matched"
+      },
+      "slurm": {
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "allocation": "billing=12,cpu=1728,gres/gpu=48,mem=11040G,node=12",
+        "nodes": "nvl72d066-T[05-16]",
+        "domain": "nvl72d066"
+      },
+      "result": {
+        "path": "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/outputs/disaggregate/mtp3-best-noeplb-client-oversample-retry2/concurrency_768/result.json",
+        "sha256": "c6b0bd56a22846c9ed667b266151841f05a3eacd8fda926e20aea1e1c473c042",
+        "concurrency": 768,
+        "rounds": 12,
+        "planned_requests": 9216,
+        "dataset_records": 4096,
+        "client_oversample_expected": true,
+        "expected_completed_requests": 9216,
+        "completed_requests": 9216,
+        "duration_seconds": 333.97289686402655,
+        "total_tps": 254316.01425603175,
+        "total_tps_per_gpu": 5298.250297000662,
+        "median_ttft_ms": 9529.273599982844,
+        "median_tpot_ms": 16.367187268809186,
+        "mean_accepted_length": 3.287351622349686
+      }
+    }
+  ]
+}

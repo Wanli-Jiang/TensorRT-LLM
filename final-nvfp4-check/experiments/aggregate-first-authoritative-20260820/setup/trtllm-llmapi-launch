@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+set -Eeuo pipefail
+
+readonly ORIGINAL=/opt/current-image-trtllm-llmapi-launch.original
+readonly RANK="${SLURM_PROCID:-${OMPI_COMM_WORLD_RANK:-${PMI_RANK:-0}}}"
+readonly JOB_ID="${SLURM_JOB_ID:-local}"
+readonly NODE="${HOSTNAME:-unknown-node}"
+readonly CACHE_ROOT="/tmp/nvfp4-best-disagg-${JOB_ID}-${NODE}-${RANK}"
+
+test -x "${ORIGINAL}"
+unset PYTHONHOME PYTHONPATH
+export PYTHONNOUSERSITE=1
+export XDG_CACHE_HOME="${CACHE_ROOT}/xdg"
+export CUDA_CACHE_PATH="${CACHE_ROOT}/cuda"
+export FLASHINFER_WORKSPACE_BASE="${CACHE_ROOT}/flashinfer-workspace"
+export FLASHINFER_CUBIN_DIR="${CACHE_ROOT}/flashinfer-cubin"
+export TRITON_CACHE_DIR="${CACHE_ROOT}/triton"
+export TORCHINDUCTOR_CACHE_DIR="${CACHE_ROOT}/torchinductor"
+export TORCH_EXTENSIONS_DIR="${CACHE_ROOT}/torch-extensions"
+export NUMBA_CACHE_DIR="${CACHE_ROOT}/numba"
+export HF_HOME="${CACHE_ROOT}/huggingface"
+export HF_MODULES_CACHE="${CACHE_ROOT}/huggingface/modules"
+
+mkdir -p \
+    "${XDG_CACHE_HOME}" \
+    "${CUDA_CACHE_PATH}" \
+    "${FLASHINFER_WORKSPACE_BASE}" \
+    "${FLASHINFER_CUBIN_DIR}" \
+    "${TRITON_CACHE_DIR}" \
+    "${TORCHINDUCTOR_CACHE_DIR}" \
+    "${TORCH_EXTENSIONS_DIR}" \
+    "${NUMBA_CACHE_DIR}" \
+    "${HF_HOME}" \
+    "${HF_MODULES_CACHE}"
+
+echo "CURRENT_IMAGE_LAUNCHER job=${JOB_ID} node=${NODE} rank=${RANK} cache=${CACHE_ROOT}"
+exec "${ORIGINAL}" "$@"

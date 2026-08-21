@@ -1,0 +1,158 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: nvfp4-current-agg-ht-nomtp-confirm-chunk-budget16896-curve
+slurm:
+  account: coreai_comparch_trtllm
+  partition: batch
+  time_limit: 02:00:00
+sbatch_directives:
+  qos: short
+  cpus-per-task: '16'
+  mem: '0'
+  exclusive: ''
+  switches: 1@10:00
+  comment: '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Current-image
+    Oakhaven NVFP4 aggregate reference reproduction; audited loading-only heartbeat;
+    metrics endpoint forbidden."}}'
+model:
+  path: /lustre/fsw/portfolios/coreai/users/williamj/models/oakhaven-max-final-nvfp4-routed-experts-experimental_vv1-clean
+  container: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/containers/trtllm-9a6889b-worktree-gdnstatic-crossmap-qa-20260814.sqsh
+  precision: fp4
+identity:
+  container:
+    image: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/containers/trtllm-9a6889b-worktree-gdnstatic-crossmap-qa-20260814.sqsh
+  frameworks:
+    tensorrt_llm: 1.3.0rc25
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  agg_nodes: 4
+  agg_workers: 1
+  gpus_per_agg: 16
+srun_options:
+  mem: '0'
+  container-remap-root: ''
+  cpu-bind: none
+frontend:
+  type: trtllm_serve
+  enable_multiple_frontends: false
+backend:
+  type: trtllm
+  aggregated_environment:
+    PYTHONUNBUFFERED: '1'
+    PYTHONDONTWRITEBYTECODE: '1'
+    PYTHONNOUSERSITE: '1'
+    NCCL_DEBUG: WARN
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    OMPI_MCA_coll_ucc_enable: '0'
+    TLLM_ALL_RANK_LOG: '1'
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_ENABLE_PDL: '1'
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    TRTLLM_LOW_M_GEMM_BACKEND: 'off'
+    TRTLLM_USE_GDN_REPLAY: '0'
+    TRTLLM_HF_WEIGHT_CACHE: '0'
+    TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: 'False'
+    TRT_LLM_LOAD_WEIGHTS_NUM_WORKERS: '4'
+    ENABLE_CONFIGURABLE_MOE: '1'
+    TRTLLM_FORCE_COMM_METHOD: NVLINK_ONE_SIDED
+    TLLM_MOE_A2A_DISPATCH_BLOCK_SIZE: '256'
+    TLLM_MOE_A2A_COMBINE_BLOCK_SIZE: '256'
+    TRTLLM_MOE_A2A_WORKSPACE_MB: '2304'
+    XDG_CACHE_HOME: /tmp/nvfp4-nomtp-budget-confirm-chunk-budget16896-curve/{node}/xdg
+    CUDA_CACHE_PATH: /tmp/nvfp4-nomtp-budget-confirm-chunk-budget16896-curve/{node}/cuda
+    TORCHINDUCTOR_CACHE_DIR: /tmp/nvfp4-nomtp-budget-confirm-chunk-budget16896-curve/{node}/torchinductor
+    TRITON_CACHE_DIR: /tmp/nvfp4-nomtp-budget-confirm-chunk-budget16896-curve/{node}/triton
+    FLASHINFER_WORKSPACE_BASE: /tmp/nvfp4-nomtp-budget-confirm-chunk-budget16896-curve/{node}/fi-workspace
+    FLASHINFER_CUBIN_DIR: /tmp/nvfp4-nomtp-budget-confirm-chunk-budget16896-curve/{node}/fi-cubins
+  trtllm_config:
+    aggregated:
+      tensor_parallel_size: 16
+      moe_expert_parallel_size: 16
+      pipeline_parallel_size: 1
+      enable_attention_dp: true
+      enable_lm_head_tp_in_adp: true
+      disable_mm_encoder: true
+      max_batch_size: 128
+      max_num_tokens: 16896
+      max_seq_len: 9472
+      enable_chunked_prefill: true
+      allreduce_strategy: AUTO
+      cuda_graph_config:
+        enable_padding: true
+        max_batch_size: 128
+        batch_sizes:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        - 24
+        - 32
+        - 40
+        - 48
+        - 56
+        - 64
+        - 72
+        - 80
+        - 88
+        - 96
+        - 104
+        - 112
+        - 120
+        - 128
+      kv_cache_config:
+        enable_block_reuse: false
+        use_kv_cache_manager_v2: false
+        free_gpu_memory_fraction: 0.92
+        dtype: fp8
+        mamba_ssm_cache_dtype: bfloat16
+        mamba_ssm_stochastic_rounding: false
+      moe_config:
+        backend: CUTEDSL
+        max_num_tokens: 16896
+        use_low_precision_moe_combine: true
+        load_balancer: /eplb.yaml
+      nvfp4_gemm_config:
+        allowed_backends:
+        - cutlass
+        - cublaslt
+        - cutedsl
+        - cuda_core
+      attention_dp_config:
+        enable_balance: true
+        batching_wait_iters: 0
+        timeout_iters: 60
+      stream_interval: 10
+      return_perf_metrics: false
+      enable_iter_perf_stats: false
+      enable_iter_req_stats: false
+      print_iter_log: false
+      trust_remote_code: true
+      num_postprocess_workers: 4
+health_check:
+  max_attempts: 480
+  interval_seconds: 10
+benchmark:
+  type: sa-bench
+  dataset_name: random
+  isl: 8192
+  osl: 1024
+  req_rate: inf
+  random_range_ratio: 1.0
+  use_chat_template: false
+  concurrencies:
+  - 1536
+  - 1792
+  - 2048
+  - 2304
+  num_prompts_mult: 3
+  num_warmup_mult: 1
+  reuse_http_connections: true
+extra_mount:
+- /scratch/fsw/portfolios/coreai/projects/coreai_comparch_trtllm/users/williamj/TensorRT-LLM/final-nvfp4-check/experiments/aggregate-first-authoritative-20260820/maps/nomtp-static528.yaml:/eplb.yaml:ro
