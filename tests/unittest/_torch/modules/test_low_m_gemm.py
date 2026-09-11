@@ -93,6 +93,70 @@ def test_attach_reaches_the_router_gate(monkeypatch) -> None:
     assert root.gate._low_m_gemm_name == "gate"
 
 
+def test_router_gemm_reuses_fp8_input_quant_buffers(monkeypatch) -> None:
+    """The fused router handoff keeps stable, module-local side-output buffers."""
+    monkeypatch.setattr(_mod, "LOW_M_GEMM_ACTIVE", True)
+    monkeypatch.setattr(LowMGemmDispatcher, "_is_candidate_shape", staticmethod(lambda *_: True))
+    monkeypatch.setattr(torch.cuda, "is_current_stream_capturing", lambda: False)
+    monkeypatch.setattr(_mod, "get_env_enable_pdl", lambda: False)
+
+    tactic = MagicMock(outputs_per_block=2)
+    direct_module = MagicMock()
+    direct_module.default_tactic.return_value = tactic
+    direct_module.prefer_direct_bf16_gemm_with_input_quant_sm100.return_value = True
+
+    def fake_run(a, b, out, quantized, scales, pdl, selected_tactic):
+        assert b.shape == (128, 16)
+        assert pdl is False
+        assert selected_tactic is tactic
+        out.fill_(1)
+        quantized.fill_(2)
+        scales.fill_(3)
+        return out, quantized, scales
+
+    direct_module.run_direct_dense_with_input_quant.side_effect = fake_run
+    monkeypatch.setitem(
+        sys.modules,
+        "flashinfer.gemm.kernels.dense_bf16_gemm_direct",
+        direct_module,
+    )
+
+    dispatcher = LowMGemmDispatcher()
+    module = torch.nn.Module()
+    module._low_m_gemm_name = "router"
+    input_tensor = torch.empty((1, 128), dtype=torch.bfloat16)
+    weight = torch.empty((16, 128), dtype=torch.bfloat16)
+
+    with torch.inference_mode():
+        first = dispatcher.apply_with_input_quant(module, input_tensor, weight, None)
+        second = dispatcher.apply_with_input_quant(module, input_tensor, weight, None)
+
+    assert first is not None and second is not None
+    assert first[0].shape == (1, 16)
+    assert first[1].shape == input_tensor.shape
+    assert first[2].shape == (1, 1)
+    assert first[0].data_ptr() == second[0].data_ptr()
+    assert first[1].data_ptr() == second[1].data_ptr()
+    assert first[2].data_ptr() == second[2].data_ptr()
+    assert direct_module.run_direct_dense_with_input_quant.call_count == 2
+
+
+def test_router_gemm_input_quant_rejects_multirow_input(monkeypatch) -> None:
+    monkeypatch.setattr(_mod, "LOW_M_GEMM_ACTIVE", True)
+    monkeypatch.setattr(LowMGemmDispatcher, "_is_candidate_shape", staticmethod(lambda *_: True))
+
+    dispatcher = LowMGemmDispatcher()
+    with torch.inference_mode():
+        result = dispatcher.apply_with_input_quant(
+            torch.nn.Module(),
+            torch.empty((2, 128), dtype=torch.bfloat16),
+            torch.empty((16, 128), dtype=torch.bfloat16),
+            None,
+        )
+
+    assert result is None
+
+
 # ---------------------------------------------------------------------------
 # linear.py fast pre-filter
 # ---------------------------------------------------------------------------

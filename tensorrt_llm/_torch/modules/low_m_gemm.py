@@ -362,6 +362,10 @@ class LowMGemmDispatcher:
         # lazily outside of CUDA-graph capture so the kernel always writes to a
         # stable device address that a surrounding CUDA graph can safely replay.
         self._output_buffers: dict = {}
+        # Router+quant side outputs are consumed synchronously by the following
+        # MoE call. Keep one set per router module so eager execution avoids
+        # three allocator calls and CUDA-graph replay sees stable addresses.
+        self._input_quant_buffers: dict = {}
         # Saved ``force`` flag from :meth:`attach` so :meth:`_init_runners` can
         # honour it without requiring an extra argument.
         self._force: bool = False
@@ -595,6 +599,78 @@ class LowMGemmDispatcher:
             return out_view.clone()
         return out_view
 
+    def apply_with_input_quant(
+        self,
+        module: torch.nn.Module,
+        input_tensor: torch.Tensor,
+        weight: torch.Tensor,
+        bias: Optional[torch.Tensor],
+    ) -> Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+        """Run an eligible direct router GEMM and emit FP8 1x128 input blocks.
+
+        The returned buffers are owned by this dispatcher and are valid until
+        the next call for the same module. This is sufficient for the intended
+        router-to-MoE handoff, where the consumer runs immediately.
+        """
+        if (
+            not LOW_M_GEMM_ACTIVE
+            or bias is not None
+            or not self._is_candidate_shape(input_tensor, weight, None)
+        ):
+            return None
+
+        input_2d = input_tensor.view(-1, input_tensor.shape[-1])
+        m, k = input_2d.shape
+        n = int(weight.shape[0])
+        if m != 1:
+            return None
+
+        try:
+            from flashinfer.gemm.kernels.dense_bf16_gemm_direct import (
+                default_tactic,
+                prefer_direct_bf16_gemm_with_input_quant_sm100,
+                run_direct_dense_with_input_quant,
+            )
+        except ImportError:
+            return None
+
+        if not prefer_direct_bf16_gemm_with_input_quant_sm100(m, n, k):
+            return None
+        try:
+            tactic = default_tactic(m, n, k)
+        except ValueError:
+            return None
+        output_ctas = (n + tactic.outputs_per_block - 1) // tactic.outputs_per_block
+        if k % 128 or output_ctas < k // 128:
+            return None
+
+        module_key = getattr(module, "_low_m_gemm_name", str(id(module)))
+        buffer_key = (module_key, n, k)
+        buffers = self._input_quant_buffers.get(buffer_key)
+        if buffers is None:
+            buffers = (
+                torch.empty((m, n), dtype=input_2d.dtype, device=input_2d.device),
+                torch.empty_like(input_2d, dtype=torch.float8_e4m3fn),
+                torch.empty((k // 128, m), dtype=torch.float32, device=input_2d.device),
+            )
+            if not torch.cuda.is_current_stream_capturing():
+                self._input_quant_buffers[buffer_key] = buffers
+        output, quantized_input, input_scale = buffers
+        run_direct_dense_with_input_quant(
+            input_2d,
+            weight.detach().t(),
+            output,
+            quantized_input,
+            input_scale,
+            get_env_enable_pdl(),
+            tactic,
+        )
+        return (
+            output.view(*input_tensor.shape[:-1], n),
+            quantized_input,
+            input_scale,
+        )
+
 
 # Process-global fallback dispatcher used by callers that bypass
 # ``prepare_low_m_gemm`` (e.g. unit tests or direct kernel benchmarks).
@@ -655,10 +731,22 @@ def apply_low_m_gemm(
     return dispatcher.apply(module, input_tensor, weight, bias, force_active=force_active)
 
 
+def apply_low_m_gemm_with_input_quant(
+    module: torch.nn.Module,
+    input_tensor: torch.Tensor,
+    weight: torch.Tensor,
+    bias: Optional[torch.Tensor],
+) -> Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Return router logits plus reusable FP8 input blocks when eligible."""
+    dispatcher: LowMGemmDispatcher = getattr(module, "_low_m_gemm_dispatcher", _DISPATCHER)
+    return dispatcher.apply_with_input_quant(module, input_tensor, weight, bias)
+
+
 __all__ = [
     "LOW_M_GEMM_ACTIVE",
     "LOW_M_GEMM_OPT_IN_ATTR",
     "_MAX_M",
     "apply_low_m_gemm",
+    "apply_low_m_gemm_with_input_quant",
     "prepare_low_m_gemm",
 ]

@@ -472,6 +472,32 @@ def test_configurable_moe_load_weights_invalidates_wrapper_transform_guard():
     assert configurable_moe._weights_transformed is False
 
 
+def test_prequantized_fp8_input_capability_is_local_and_uncompiled(monkeypatch):
+    from tensorrt_llm._torch.moe.fused_moe import configurable_moe as configurable_moe_module
+    from tensorrt_llm._torch.moe.fused_moe.configurable_moe import ConfigurableMoE
+
+    moe = ConfigurableMoE.__new__(ConfigurableMoE)
+    torch.nn.Module.__init__(moe)
+    moe.backend = SimpleNamespace(
+        scheduler_kind=MoESchedulerKind.EXTERNAL_COMM,
+        has_deepseek_fp8_block_scales=True,
+    )
+    moe.comm = None
+    moe.apply_router_weight_on_input = False
+    monkeypatch.setattr(configurable_moe_module, "is_torch_compiling", lambda: False)
+
+    assert moe.supports_prequantized_fp8_block_scale_input()
+
+    moe.apply_router_weight_on_input = True
+    assert not moe.supports_prequantized_fp8_block_scale_input()
+    moe.apply_router_weight_on_input = False
+    moe.comm = object()
+    assert not moe.supports_prequantized_fp8_block_scale_input()
+    moe.comm = None
+    monkeypatch.setattr(configurable_moe_module, "is_torch_compiling", lambda: True)
+    assert not moe.supports_prequantized_fp8_block_scale_input()
+
+
 def test_moe_nvfp4_activation_quantization_capability():
     assert NVFP4FusedMoEMethod.quantizes_nvfp4_activations
     assert not W4A16NVFP4CutlassFusedMoEMethod.quantizes_nvfp4_activations
