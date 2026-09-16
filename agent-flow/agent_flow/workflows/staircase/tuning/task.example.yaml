@@ -1,0 +1,234 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Staircase tuning uses the same strict, immutable task contract as onboarding.
+schema_version: 2
+
+repository:
+  root: /shared/checkouts/TensorRT-LLM
+  base_commit: 0123456789abcdef0123456789abcdef01234567
+  dirty_policy: reject
+  workspace_root: /shared/staircase-runs
+
+reference:
+  checkpoint: /shared/models/Qwen3-30B-A3B
+  provenance: huggingface.co/Qwen/Qwen3-30B-A3B@0123456789abcdef
+  architecture: Qwen3MoeForCausalLM
+  additional_sources: []
+
+target:
+  family: qwen3_moe
+  checkpoint_id: qwen3_30b_a3b
+  sm: 100
+  world_size: 8
+  mapping:
+    tensor_parallel_size: 8
+    pipeline_parallel_size: 1
+    moe_expert_parallel_size: 8
+    moe_tensor_parallel_size: 1
+    attention_data_parallel_size: 1
+  features:
+    - tune_catalog
+  expected_route: tensorrt_llm/_torch/modeling_v2/models/qwen3_moe
+  synthetic_target: false
+
+gates:
+  accuracy:
+    selector: tests/integration/defs/accuracy/test_modeling_v2_qwen3_moe.py::TestModelingV2Qwen3Moe::test_gsm8k
+    reference: tests/integration/defs/accuracy/references/gsm8k.yaml
+    protocol: matched-before-after-greedy-500
+    tolerance: 0.0
+  feature_signal_tests:
+    - tests/integration/defs/accuracy/test_modeling_v2_qwen3_moe.py::TestModelingV2Qwen3Moe::test_tuning_feature_signal
+  boot_tests:
+    - tests/integration/defs/accuracy/test_modeling_v2_qwen3_moe.py::TestModelingV2Qwen3Moe::test_boot
+  component_tests:
+    - tests/unittest/_torch/modeling_v2/moe/test_modeling_v2_fused_moe.py::test_qwen3_moe_shape_bf16
+  collective_tests:
+    - tests/unittest/_torch/modeling_v2/comm/test_modeling_v2_allgather_op_matrix.py::test_allgather_op_matrix
+
+certification:
+  mode: REAL
+  expected_product_identity:
+    repository_commit: 0123456789abcdef0123456789abcdef01234567
+    python_tensorrt_llm_path: /shared/checkouts/TensorRT-LLM/tensorrt_llm/__init__.py
+    native_build_identity: trtllm-local-dev-2026-09-16
+    image_identity: /shared/containers/trtllm-dev.sqsh
+    compute_capability: "10.0"
+    collective_backend: nccl
+    transport: ib
+
+execution:
+  mode: slurm
+  agent:
+    backend_kind: codex
+    model: gpt-5-codex
+  slurm:
+    role_classes:
+      plan_drafter:
+        resource_class: coder_analysis
+        network_policy: backend_api_only
+        environment:
+          allowlist: []
+          values: {PYTHONNOUSERSITE: "1"}
+        credential_broker:
+          broker_id: site-codex-broker
+          allowed_credential_names: [OPENAI_API_KEY]
+          per_attempt_ttl_seconds: 14400
+      plan_reviewer:
+        resource_class: reviewer_analysis
+        network_policy: backend_api_only
+        environment:
+          allowlist: []
+          values: {PYTHONNOUSERSITE: "1"}
+        credential_broker:
+          broker_id: site-codex-broker
+          allowed_credential_names: [OPENAI_API_KEY]
+          per_attempt_ttl_seconds: 14400
+      smith_coder:
+        resource_class: coder_analysis
+        network_policy: backend_api_only
+        environment:
+          allowlist: []
+          values: {PYTHONNOUSERSITE: "1"}
+        credential_broker:
+          broker_id: site-codex-broker
+          allowed_credential_names: [OPENAI_API_KEY]
+          per_attempt_ttl_seconds: 14400
+      assembler_coder:
+        resource_class: coder_analysis
+        network_policy: backend_api_only
+        environment:
+          allowlist: []
+          values: {PYTHONNOUSERSITE: "1"}
+        credential_broker:
+          broker_id: site-codex-broker
+          allowed_credential_names: [OPENAI_API_KEY]
+          per_attempt_ttl_seconds: 14400
+      tuner_coder:
+        resource_class: exploratory_probe
+        network_policy: backend_api_only
+        environment:
+          allowlist: []
+          values: {PYTHONNOUSERSITE: "1"}
+        credential_broker:
+          broker_id: site-codex-broker
+          allowed_credential_names: [OPENAI_API_KEY]
+          per_attempt_ttl_seconds: 14400
+      reviewer:
+        resource_class: reviewer_analysis
+        network_policy: backend_api_only
+        environment:
+          allowlist: []
+          values: {PYTHONNOUSERSITE: "1"}
+        credential_broker:
+          broker_id: site-codex-broker
+          allowed_credential_names: [OPENAI_API_KEY]
+          per_attempt_ttl_seconds: 14400
+      qa:
+        resource_class: reviewer_rerun
+        network_policy: backend_api_only
+        environment:
+          allowlist: []
+          values: {PYTHONNOUSERSITE: "1"}
+        credential_broker:
+          broker_id: site-codex-broker
+          allowed_credential_names: [OPENAI_API_KEY]
+          per_attempt_ttl_seconds: 14400
+    gate_classes:
+      accuracy:
+        resource_class: deterministic_gate
+      boot:
+        resource_class: deterministic_gate
+      collective:
+        resource_class: deterministic_gate
+      feature-signal:
+        resource_class: deterministic_gate
+    agent_worker:
+      image: /shared/containers/staircase-agent-worker.sqsh
+      build_identity: staircase-agent-worker-2026-09-16
+      scheduler_clients: false
+      network_enforcement: certified_worker_image
+    controller:
+      account: coreai
+      partition: batch
+      qos: normal
+      reservation: null
+      time_limit: "04:00:00"
+      cpus_per_task: 16
+      memory: 64G
+      image: /shared/containers/trtllm-dev.sqsh
+      scheduler_clients: true
+      container_launch_mode: in_allocation_srun
+      mounts:
+        - host_path: /shared
+          container_path: /shared
+          read_only: false
+      environment:
+        PYTHONNOUSERSITE: "1"
+      build_identity: trtllm-local-dev-2026-09-16
+      dispatch_mode: nested_submission
+      requeue: true
+      advance_signal_lead_seconds: 300
+      heartbeat_timeout_seconds: 60
+      lease_timeout_seconds: 180
+      orphan_grace_seconds: 300
+      credential_broker_socket: /shared/staircase/credential-broker.sock
+    smith:
+      max_parallel_items: 4
+      max_nodes_total: 8
+      max_gpus_total: 32
+      distinct_nodes_required: true
+      exclusive: true
+      resource_classes:
+        coder_analysis:
+          nodes: 1
+          tasks_per_node: 1
+          gpus_per_node: 0
+          cpus_per_task: 8
+          memory: 32G
+          time_limit: "00:30:00"
+        exploratory_probe:
+          nodes: 1
+          tasks_per_node: 1
+          gpus_per_node: 1
+          cpus_per_task: 8
+          memory: 64G
+          time_limit: "01:00:00"
+        deterministic_gate:
+          nodes: 2
+          tasks_per_node: 4
+          gpus_per_node: 4
+          cpus_per_task: 8
+          memory: 128G
+          time_limit: "02:00:00"
+        reviewer_analysis:
+          nodes: 1
+          tasks_per_node: 1
+          gpus_per_node: 0
+          cpus_per_task: 8
+          memory: 32G
+          time_limit: "00:30:00"
+        reviewer_rerun:
+          nodes: 1
+          tasks_per_node: 1
+          gpus_per_node: 1
+          cpus_per_task: 8
+          memory: 128G
+          time_limit: "02:00:00"
+      per_item_override_bounds:
+        max_nodes: 2
+        max_tasks_per_node: 4
+        max_gpus_per_node: 4
+        max_cpus_per_task: 16
+        max_memory: 128G
+        max_time_limit: "02:00:00"
+      retry_policy:
+        preempted: 2
+        node_failure: 1
+
+delivery:
+  mode: signed_commits
+  branch: staircase/qwen3-moe-tuning
+  merge: false
+  push: false
