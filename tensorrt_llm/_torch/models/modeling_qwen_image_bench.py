@@ -78,7 +78,10 @@ class _QwenImageBenchModelMixin:
         weights: Dict[str, torch.Tensor],
         weight_mapper: Optional[BaseWeightMapper] = None,
     ):
-        if not _is_mm_disagg():
+        # ``disable_mm_encoder=True`` intentionally constructs a text-only
+        # wrapper with no vision module.  The language-model weights must still
+        # load through the same mature Qwen3.5 mapper in that configuration.
+        if getattr(self, "mm_encoder", None) is not None and not _is_mm_disagg():
             self.mm_encoder.load_weights(weights)
 
         qwen3_5_weight_mapper = Qwen3_5MoeHfWeightMapper()

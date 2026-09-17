@@ -256,3 +256,23 @@ def test_qwen_image_bench_mapper_uses_normalized_inner_model_config():
 
     init_mapper.assert_called_once_with(llm, inner_model_config)
     llm.load_weights.assert_called_once()
+
+
+def test_qwen_image_bench_text_only_load_skips_absent_encoder():
+    inner_model_config = object()
+    llm = SimpleNamespace(model_config=inner_model_config, load_weights=Mock())
+    model = QwenImageBenchModel.__new__(QwenImageBenchModel)
+    object.__setattr__(model, "llm", llm)
+    object.__setattr__(model, "mm_encoder", None)
+
+    with (
+        patch(
+            "tensorrt_llm._torch.models.modeling_qwen_image_bench._is_mm_disagg",
+            return_value=False,
+        ),
+        patch.object(Qwen3_5MoeHfWeightMapper, "init_model_and_config") as init_mapper,
+    ):
+        model.load_weights({})
+
+    init_mapper.assert_called_once_with(llm, inner_model_config)
+    llm.load_weights.assert_called_once()

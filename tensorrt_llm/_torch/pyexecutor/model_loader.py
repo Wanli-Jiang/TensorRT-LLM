@@ -43,7 +43,6 @@ from tensorrt_llm.quantization.utils.fp4_utils import float4_e2m1x2
 from ...llmapi.llm_args import LoadFormat
 from ..model_config import ModelConfig
 from ..models import AutoModelForCausalLM
-from ..models.checkpoints.base_checkpoint_loader import BaseCheckpointLoader
 from ..models.checkpoints.checkpoint_catalog import CheckpointCatalog
 from ..models.checkpoints.weight_load_plan import WeightLoadPlan
 from ..models.modeling_utils import (DecoderModelForCausalLM, MetaInitMode,
@@ -743,6 +742,11 @@ class ModelLoader:
         config_kwargs = {
             'trust_remote_code': llm_args.trust_remote_code,
             'mm_encoder_only': llm_args.mm_encoder_only,
+            # The model class is resolved from this provisional config before
+            # the runtime config below is loaded. Keep text-only multimodal
+            # routing identical across both loads so a fail-closed
+            # modeling_v2 target does not observe the default False here.
+            'disable_mm_encoder': llm_args.disable_mm_encoder,
         }
         if llm_args.parallel_config:
             config_kwargs['mapping'] = llm_args.parallel_config.to_mapping()

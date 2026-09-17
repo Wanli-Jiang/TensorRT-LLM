@@ -51,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ep", type=int, default=-1, help="moe_expert_parallel_size")
     p.add_argument("--moe-tp", type=int, default=-1, help="moe_tensor_parallel_size")
     p.add_argument("--attention-dp", action="store_true", help="enable_attention_dp")
+    p.add_argument(
+        "--disable-mm-encoder",
+        action="store_true",
+        help="route a multimodal checkpoint as a text-only deployment",
+    )
     p.add_argument("--sm", default=None, help="SM version as major.minor; defaults to this device")
     return p
 
@@ -78,6 +83,7 @@ def main(argv: Optional[list] = None) -> int:
         args.model,
         mapping=mapping,
         moe_backend="AUTO",
+        disable_mm_encoder=args.disable_mm_encoder,
     )
     ctx = ModelingV2Context.from_model_config(model_config, sm=_sm(args.sm))
     pretrained_config = model_config.pretrained_config

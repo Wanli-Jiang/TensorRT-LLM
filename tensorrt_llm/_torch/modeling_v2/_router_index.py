@@ -58,6 +58,9 @@ MODELING_V2_ENV = "TRTLLM_MODELING_V2"
 MODELING_V2_ROUTERS = {
     "GptOssForCausalLM": "models.gpt_oss.routing",
     "DeepseekV3ForCausalLM": "models.deepseek_v3.routing",
+    "Qwen3_5ForConditionalGeneration": "models.qwen3_5.routing",
+    "QwenImageBenchForConditionalGeneration": "models.qwen3_5.routing",
+    "Qwen3_5ForCausalLM": "models.qwen3_5.routing",
 }
 
 #: Backends whose model construction reaches ``modeling_v2_resolve``. The
@@ -157,8 +160,10 @@ class ModelingV2Context:
     mapping: Any
     sm: Tuple[int, int]
     quant_config: Any
+    quant_config_dict: Any
     spec_config: Any
     is_disagg: bool
+    disable_mm_encoder: bool
 
     @classmethod
     def from_model_config(
@@ -185,8 +190,10 @@ class ModelingV2Context:
             mapping=config.mapping,
             sm=sm,
             quant_config=config.quant_config,
+            quant_config_dict=config.quant_config_dict,
             spec_config=config.spec_config,
             is_disagg=getattr(config, "is_disagg", False),
+            disable_mm_encoder=config.disable_mm_encoder,
         )
 
 
