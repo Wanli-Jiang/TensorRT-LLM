@@ -859,7 +859,7 @@ class SlurmScheduler:
         queue_argv = [
             "squeue",
             "--noheader",
-            "--me",
+            f"--user={self._username}",
             f"--name={job_name}",
             "--format=%i|%T|%R|%k",
         ]
@@ -904,7 +904,7 @@ class SlurmScheduler:
         queue_argv = [
             "squeue",
             "--noheader",
-            "--me",
+            f"--user={self._username}",
             f"--name={job_name}",
             "--format=%i|%T|%R|%k|%u|%j",
         ]

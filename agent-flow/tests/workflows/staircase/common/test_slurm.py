@@ -784,6 +784,8 @@ def test_lookup_adopts_unique_live_submission() -> None:
     assert lookup.status is JobStatus.RUNNING
     assert lookup.source is ObservationSource.QUEUE
     assert executor.calls[0][0][3] == f"--name=staircase-{_TOKEN}"
+    assert "--user=tester" in executor.calls[0][0]
+    assert "--me" not in executor.calls[0][0]
     assert "--format=%i|%T|%R|%k" in executor.calls[0][0]
 
 
@@ -860,6 +862,8 @@ def test_strict_probe_unions_queue_and_accounting_and_detects_duplicates() -> No
         JobIdentity("12346", cluster="alpha"),
     )
     assert len(executor.calls) == 2
+    assert "--user=tester" in executor.calls[0][0]
+    assert "--me" not in executor.calls[0][0]
     assert "--format=%i|%T|%R|%k|%u|%j" in executor.calls[0][0]
     assert "--format=JobIDRaw,State,Reason,Comment,User,JobName" in executor.calls[1][0]
     assert "--clusters=alpha" in executor.calls[0][0]
