@@ -594,6 +594,7 @@ def render_internal_script(
             "--nodes=1",
             "--ntasks=1",
             "--overlap",
+            "--cpu-bind=none",
             "--no-container-mount-home",
         ]
         if resources.gpu_allocation_padding:
