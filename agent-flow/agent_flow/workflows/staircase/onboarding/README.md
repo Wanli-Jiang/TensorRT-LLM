@@ -189,6 +189,9 @@ carrying the validated `--container-image`, optional `--container-mounts`, and
 fixed internal argv.
 Disabling the inner step's affinity binding does not relax the outer
 allocation's cgroup CPU limits or GPU GRES/device isolation.
+The validated non-secret environment and controller-owned agent launch-policy
+digest are repeated in the fixed inner argv, so worker admission does not
+depend on Pyxis propagating the batch-job environment.
 For admitted single-rank GPU allocation padding, that fixed `srun` additionally
 uses `--gpus-per-task=1`.
 Pyxis flags never appear on `sbatch`; user task text cannot inject shell or

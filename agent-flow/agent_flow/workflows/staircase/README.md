@@ -113,7 +113,10 @@ or worker argv. Disabling the inner step's affinity binding does not relax the
 outer allocation's cgroup CPU limits or GPU GRES/device isolation. Pyxis flags
 are not placed on `sbatch`, user text cannot add shell fragments or scheduler
 flags, and `exec` preserves the `srun`/container process exit status as the
-batch-job exit status.
+batch-job exit status. The validated non-secret job environment is repeated in
+that same fixed inner argv; agent workers additionally receive the
+controller-owned launch-policy digest there. Pyxis environment propagation
+therefore cannot weaken the worker policy or environment binding.
 
 Each resource class may explicitly override the controller's `partition` and
 `qos`; omitted values continue to inherit the controller defaults. This lets a
