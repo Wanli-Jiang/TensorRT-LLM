@@ -197,6 +197,19 @@ def test_fixed_script_quotes_paths_without_accepting_raw_fragments(tmp_path: Pat
     assert script.count("exec ") == 1
 
 
+def test_fixed_script_uses_resolved_container_launcher(
+    resources: ResourceRequest,
+    worker_command: InternalCommand,
+) -> None:
+    script = render_internal_script(
+        worker_command,
+        resources,
+        container_launcher="/cm/local/apps/slurm/25.11/bin/srun",
+    )
+
+    assert "exec /cm/local/apps/slurm/25.11/bin/srun " in script
+
+
 def test_cpu_container_unsets_only_injected_placement_environment(
     resources: ResourceRequest,
     worker_command: InternalCommand,
@@ -321,6 +334,25 @@ def test_submit_builds_only_structured_argv_and_parses_identity(
     assert "--no-container-mount-home" in script
     assert "--container-image=/images/trtllm.sqsh" in script
     assert "--container-mounts=" in script
+
+
+def test_submit_uses_controller_resolved_container_launcher(
+    resources: ResourceRequest,
+    worker_command: InternalCommand,
+) -> None:
+    executor = ScriptedExecutor([CommandResult(0, "12345;alpha\n")])
+    scheduler = SlurmScheduler(
+        executor=executor,
+        cluster="alpha",
+        username="tester",
+        container_launcher="/cm/local/apps/slurm/25.11/bin/srun",
+    )
+
+    scheduler.submit(resources, worker_command, _TOKEN)
+
+    _argv, script = executor.calls[0]
+    assert script is not None
+    assert "exec /cm/local/apps/slurm/25.11/bin/srun " in script
 
 
 def test_submit_padded_single_rank_binds_only_one_gpu_to_the_worker(

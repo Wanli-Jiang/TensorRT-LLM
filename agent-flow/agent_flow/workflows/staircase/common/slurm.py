@@ -24,8 +24,10 @@ passing through arbitrary ``sbatch`` options.
 from __future__ import annotations
 
 import getpass
+import os
 import re
 import shlex
+import shutil
 import subprocess
 from dataclasses import dataclass
 from enum import Enum
@@ -566,6 +568,8 @@ class Scheduler(Protocol):
 def render_internal_script(
     command: InternalCommand,
     resources: ResourceRequest | None = None,
+    *,
+    container_launcher: str = "srun",
 ) -> str:
     """Render a fixed Bash script for an internal Staircase entrypoint.
 
@@ -575,6 +579,8 @@ def render_internal_script(
 
     Args:
         command: Validated internal controller or worker command.
+        resources: Optional validated resource and container launch contract.
+        container_launcher: Resolved host executable used to enter a container.
 
     Returns:
         A complete script suitable for submission through ``sbatch`` stdin.
@@ -584,7 +590,7 @@ def render_internal_script(
         if resources.container_launch_mode != _CONTAINER_LAUNCH_MODE:
             raise ValueError("unsupported container launch mode")
         launcher = [
-            "srun",
+            container_launcher,
             "--nodes=1",
             "--ntasks=1",
             "--overlap",
@@ -688,6 +694,7 @@ class SlurmScheduler:
         username: str | None = None,
         command_timeout_seconds: int = 30,
         submission_absence_certified: bool = False,
+        container_launcher: str | None = None,
     ) -> None:
         if cluster is not None:
             _validate_scheduler_name(cluster, "cluster")
@@ -699,6 +706,22 @@ class SlurmScheduler:
         self._cluster = cluster
         self._username = resolved_username
         self._submission_absence_certified = submission_absence_certified
+        if container_launcher is None and executor is None:
+            discovered_launcher = shutil.which("srun")
+            if discovered_launcher is None:
+                raise ValueError("production Slurm scheduler cannot resolve srun")
+            launcher_path = Path(discovered_launcher).resolve(strict=True)
+            if not launcher_path.is_file() or not os.access(launcher_path, os.X_OK):
+                raise ValueError("production Slurm scheduler resolved a non-executable srun")
+            self._container_launcher = launcher_path.as_posix()
+        else:
+            self._container_launcher = container_launcher or "srun"
+            if (
+                not isinstance(self._container_launcher, str)
+                or not self._container_launcher
+                or any(character in self._container_launcher for character in ("\x00", "\n", "\r"))
+            ):
+                raise ValueError("container launcher must be a non-empty single-line string")
 
     def submit(
         self,
@@ -713,7 +736,14 @@ class SlurmScheduler:
         exported_environment = normalize_environment(environment)
         self._validate_dependency_cluster(dependency)
         argv = self._build_submit_argv(resources, token, exported_environment, dependency)
-        result = self._run(argv, input_text=render_internal_script(command, resources))
+        result = self._run(
+            argv,
+            input_text=render_internal_script(
+                command,
+                resources,
+                container_launcher=self._container_launcher,
+            ),
+        )
         output = result.stdout.strip()
         if not output or "\n" in output:
             raise SlurmCommandError(f"unexpected sbatch --parsable output: {output!r}")
