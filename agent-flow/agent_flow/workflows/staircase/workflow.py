@@ -422,7 +422,7 @@ def start_run(
             mode=mode,
             task=effective_task,
             workspace=workspace,
-            scheduler=scheduler or SlurmScheduler(),
+            scheduler=scheduler or _default_slurm_scheduler(),
             submission_clock=submission_clock,
             submission_recovery_policy=submission_recovery_policy,
         )
@@ -479,7 +479,7 @@ def start_run(
     }
     intent_path = workspace / INITIAL_LAUNCH_INTENT_FILENAME
     _write_once_json(intent_path, intent)
-    active_scheduler = scheduler or SlurmScheduler()
+    active_scheduler = scheduler or _default_slurm_scheduler()
     identity = _submit_launcher_intent(
         intent_path=intent_path,
         receipt_path=workspace / INITIAL_LAUNCH_RECEIPT_FILENAME,
@@ -2223,6 +2223,11 @@ def _controller_scheduler(
         current_job.cluster if current_job is not None else os.environ.get("SLURM_CLUSTER_NAME")
     )
     return scheduler or SlurmScheduler(cluster=cluster)
+
+
+def _default_slurm_scheduler() -> SlurmScheduler:
+    """Bind login-side submissions to Slurm's explicit cluster identity."""
+    return SlurmScheduler(cluster=os.environ.get("SLURM_CLUSTER_NAME") or None)
 
 
 def _current_controller_job(task: NormalizedTask) -> JobIdentity | None:

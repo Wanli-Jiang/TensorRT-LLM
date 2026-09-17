@@ -128,6 +128,23 @@ def _skip_preflight(_task: object, _phase: str) -> None:
     """Explicit CPU-test seam that never probes the host Slurm installation."""
 
 
+def test_default_slurm_scheduler_binds_environment_cluster(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[str | None] = []
+    sentinel = FakeScheduler(cluster="alpha")
+
+    def build_scheduler(*, cluster: str | None = None) -> FakeScheduler:
+        observed.append(cluster)
+        return sentinel
+
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "alpha")
+    monkeypatch.setattr(staircase_workflow, "SlurmScheduler", build_scheduler)
+
+    assert staircase_workflow._default_slurm_scheduler() is sentinel
+    assert observed == ["alpha"]
+
+
 def _start(
     *,
     mode: str,
