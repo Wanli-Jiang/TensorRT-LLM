@@ -30,7 +30,13 @@ from .preflight import ObservedMount, PreflightPhase, PreflightSnapshot, require
 _EXACT_COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}\Z")
 _MAX_OUTPUT_BYTES = 16_384
 _MAX_DIAGNOSTIC_CHARACTERS = 2_000
-_COMMAND_TIMEOUT_SECONDS = 30.0
+_HEAD_GIT_SUFFIX = ("rev-parse", "--verify", "HEAD")
+_STATUS_GIT_SUFFIX = ("status", "--porcelain=v1", "--untracked-files=normal")
+_COMMAND_TIMEOUT_SECONDS_BY_SUFFIX = {
+    _HEAD_GIT_SUFFIX: 30.0,
+    _STATUS_GIT_SUFFIX: 180.0,
+}
+_PROCESS_REAP_TIMEOUT_SECONDS = 5.0
 _READ_SIZE_BYTES = 4_096
 
 
@@ -210,7 +216,8 @@ def run_read_only_command(
     except OSError as exc:
         raise DiscoveryError(f"could not start read-only command: {_bounded_error(exc)}") from None
 
-    stdout, stderr = _read_bounded_process(process, output_limit_bytes)
+    timeout_seconds = _COMMAND_TIMEOUT_SECONDS_BY_SUFFIX[argv[8:]]
+    stdout, stderr = _read_bounded_process(process, output_limit_bytes, timeout_seconds)
     return CommandResult(
         process.returncode,
         stdout.decode("utf-8", errors="replace"),
@@ -221,10 +228,10 @@ def run_read_only_command(
 def _read_bounded_process(
     process: subprocess.Popen[bytes],
     output_limit_bytes: int,
+    timeout_seconds: float,
 ) -> tuple[bytes, bytes]:
     if process.stdout is None or process.stderr is None:
-        process.kill()
-        process.wait()
+        _terminate_process(process)
         raise DiscoveryError("read-only command did not expose captured output")
 
     selector = selectors.DefaultSelector()
@@ -234,13 +241,15 @@ def _read_bounded_process(
         selector.register(stream, selectors.EVENT_READ, label)
     captured = {"stdout": bytearray(), "stderr": bytearray()}
     total = 0
-    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout_seconds
     try:
         while selector.get_map():
             remaining_seconds = deadline - time.monotonic()
             if remaining_seconds <= 0:
                 _terminate_process(process)
-                raise DiscoveryError("read-only command exceeded the 30 second timeout")
+                raise DiscoveryError(
+                    f"read-only command exceeded the {timeout_seconds:g} second timeout"
+                )
             events = selector.select(remaining_seconds)
             if not events:
                 continue
@@ -264,12 +273,16 @@ def _read_bounded_process(
         remaining_seconds = deadline - time.monotonic()
         if remaining_seconds <= 0:
             _terminate_process(process)
-            raise DiscoveryError("read-only command exceeded the 30 second timeout")
+            raise DiscoveryError(
+                f"read-only command exceeded the {timeout_seconds:g} second timeout"
+            )
         try:
             process.wait(timeout=remaining_seconds)
         except subprocess.TimeoutExpired:
             _terminate_process(process)
-            raise DiscoveryError("read-only command exceeded the 30 second timeout") from None
+            raise DiscoveryError(
+                f"read-only command exceeded the {timeout_seconds:g} second timeout"
+            ) from None
     finally:
         selector.close()
         for _, stream in streams:
@@ -281,7 +294,12 @@ def _read_bounded_process(
 def _terminate_process(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is None:
         process.kill()
-    process.wait()
+    try:
+        process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        raise DiscoveryError(
+            "read-only command did not terminate within the 5 second reap timeout"
+        ) from None
 
 
 def _strict_resolve(path: Path) -> Path:
@@ -390,10 +408,7 @@ def _validate_read_only_git_argv(argv: tuple[str, ...]) -> None:
     if not repository_root.is_absolute() or ".." in repository_root.parts:
         raise DiscoveryError("Git discovery repository path must be canonical")
     suffix = argv[8:]
-    if suffix not in {
-        ("rev-parse", "--verify", "HEAD"),
-        ("status", "--porcelain=v1", "--untracked-files=normal"),
-    }:
+    if suffix not in _COMMAND_TIMEOUT_SECONDS_BY_SUFFIX:
         raise DiscoveryError("only fixed read-only Git discovery commands are allowed")
 
 

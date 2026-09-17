@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
+from agent_flow.workflows.staircase.common import discovery as discovery_module
 from agent_flow.workflows.staircase.common.discovery import (
     CommandResult,
     DiscoveryError,
@@ -378,3 +380,101 @@ def test_command_and_path_errors_have_bounded_diagnostics(tmp_path: Path) -> Non
 def test_production_runner_rejects_non_discovery_argv() -> None:
     with pytest.raises(DiscoveryError, match="only fixed read-only Git"):
         run_read_only_command(("git", "status"), output_limit_bytes=100)
+
+
+@pytest.mark.parametrize(
+    ("suffix", "expected_timeout_seconds"),
+    [
+        (("rev-parse", "--verify", "HEAD"), 30.0),
+        (("status", "--porcelain=v1", "--untracked-files=normal"), 180.0),
+    ],
+)
+def test_production_runner_uses_command_specific_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: tuple[str, ...],
+    expected_timeout_seconds: float,
+) -> None:
+    class FakeProcess:
+        returncode = 0
+
+    process = FakeProcess()
+    observed: list[tuple[object, int, float]] = []
+
+    def fake_popen(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        return process
+
+    def fake_read_bounded_process(
+        observed_process: object,
+        output_limit_bytes: int,
+        timeout_seconds: float,
+    ) -> tuple[bytes, bytes]:
+        observed.append((observed_process, output_limit_bytes, timeout_seconds))
+        return b"", b""
+
+    monkeypatch.setattr(discovery_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(discovery_module, "_read_bounded_process", fake_read_bounded_process)
+    argv = (
+        "git",
+        "--no-optional-locks",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.untrackedCache=false",
+        "-C",
+        "/repo",
+        *suffix,
+    )
+
+    result = run_read_only_command(argv, output_limit_bytes=100)
+
+    assert result == CommandResult(0, "", "")
+    assert observed == [(process, 100, expected_timeout_seconds)]
+
+
+def test_bounded_reader_reports_selected_timeout_and_reaps_process() -> None:
+    process = discovery_module.subprocess.Popen(
+        (sys.executable, "-c", "import time; time.sleep(60)"),
+        stdin=discovery_module.subprocess.DEVNULL,
+        stdout=discovery_module.subprocess.PIPE,
+        stderr=discovery_module.subprocess.PIPE,
+        shell=False,
+        close_fds=True,
+    )
+
+    with pytest.raises(DiscoveryError, match="0.05 second timeout"):
+        discovery_module._read_bounded_process(process, 100, 0.05)
+
+    assert process.poll() is not None
+
+
+def test_production_runner_rejects_unknown_suffix_before_starting_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = False
+
+    def fake_popen(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        nonlocal started
+        started = True
+        return object()
+
+    monkeypatch.setattr(discovery_module.subprocess, "Popen", fake_popen)
+    argv = (
+        "git",
+        "--no-optional-locks",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.untrackedCache=false",
+        "-C",
+        "/repo",
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+    )
+
+    with pytest.raises(DiscoveryError, match="only fixed read-only Git"):
+        run_read_only_command(argv, output_limit_bytes=100)
+
+    assert started is False
