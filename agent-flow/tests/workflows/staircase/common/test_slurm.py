@@ -195,6 +195,7 @@ def test_fixed_script_quotes_paths_without_accepting_raw_fragments(tmp_path: Pat
     assert "--owner-nonce controller-0001" in script
     assert "'" in script
     assert script.count("exec ") == 1
+    assert "--cpu-bind" not in script
 
 
 def test_fixed_script_uses_resolved_container_launcher(
@@ -225,6 +226,8 @@ def test_cpu_container_unsets_only_injected_placement_environment(
     cpu_script = render_internal_script(worker_command, cpu_resources)
     gpu_script = render_internal_script(worker_command, resources)
 
+    assert cpu_script.count("--cpu-bind=none") == 1
+    assert gpu_script.count("--cpu-bind=none") == 1
     python_index = cpu_script.index("python3")
     for name in (
         "CUDA_VISIBLE_DEVICES",
@@ -330,7 +333,8 @@ def test_submit_builds_only_structured_argv_and_parses_identity(
     assert "--clusters=alpha" in argv
     assert not any(value == "--wrap" or value.startswith("--wrap=") for value in argv)
     assert script == render_internal_script(worker_command, resources)
-    assert "exec srun --nodes=1 --ntasks=1 --overlap" in script
+    assert "exec srun --nodes=1 --ntasks=1 --overlap --cpu-bind=none" in script
+    assert script.count("--cpu-bind=none") == 1
     assert "--no-container-mount-home" in script
     assert "--container-image=/images/trtllm.sqsh" in script
     assert "--container-mounts=" in script

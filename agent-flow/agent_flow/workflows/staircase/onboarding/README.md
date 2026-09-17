@@ -183,8 +183,12 @@ the declared build identity is unavailable.
 
 For every containerized controller or worker, `sbatch` requests only the bare
 allocation/resources. The fixed submitted script then `exec`s one
-in-allocation `srun --nodes=1 --ntasks=1 --overlap --no-container-mount-home` carrying the validated
-`--container-image`, optional `--container-mounts`, and fixed internal argv.
+in-allocation
+`srun --nodes=1 --ntasks=1 --overlap --cpu-bind=none --no-container-mount-home`
+carrying the validated `--container-image`, optional `--container-mounts`, and
+fixed internal argv.
+Disabling the inner step's affinity binding does not relax the outer
+allocation's cgroup CPU limits or GPU GRES/device isolation.
 For admitted single-rank GPU allocation padding, that fixed `srun` additionally
 uses `--gpus-per-task=1`.
 Pyxis flags never appear on `sbatch`; user task text cannot inject shell or

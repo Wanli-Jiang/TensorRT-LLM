@@ -107,11 +107,13 @@ There is no host-to-container path translation of frozen task identities.
 Container launch is two-level and fixed. The trusted scheduler adapter invokes
 `sbatch` with allocation/resource flags only and submits a generated script on
 stdin. Inside the allocation that script uses `exec srun` with fixed
-`--nodes=1 --ntasks=1 --overlap`, the validated `--container-image` and
-`--container-mounts`, and the fixed internal controller or worker argv. Pyxis
-flags are not placed on `sbatch`, user text cannot add shell fragments or
-scheduler flags, and `exec` preserves the `srun`/container process exit status
-as the batch-job exit status.
+`--nodes=1 --ntasks=1 --overlap --cpu-bind=none`, the validated
+`--container-image` and `--container-mounts`, and the fixed internal controller
+or worker argv. Disabling the inner step's affinity binding does not relax the
+outer allocation's cgroup CPU limits or GPU GRES/device isolation. Pyxis flags
+are not placed on `sbatch`, user text cannot add shell fragments or scheduler
+flags, and `exec` preserves the `srun`/container process exit status as the
+batch-job exit status.
 
 Each resource class may explicitly override the controller's `partition` and
 `qos`; omitted values continue to inherit the controller defaults. This lets a
