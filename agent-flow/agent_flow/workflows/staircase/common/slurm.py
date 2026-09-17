@@ -569,6 +569,7 @@ def render_internal_script(
     command: InternalCommand,
     resources: ResourceRequest | None = None,
     *,
+    environment: Mapping[str, str] | None = None,
     container_launcher: str = "srun",
 ) -> str:
     """Render a fixed Bash script for an internal Staircase entrypoint.
@@ -580,6 +581,8 @@ def render_internal_script(
     Args:
         command: Validated internal controller or worker command.
         resources: Optional validated resource and container launch contract.
+        environment: Validated non-secret environment repeated inside the
+            fixed container launcher instead of trusting step propagation.
         container_launcher: Resolved host executable used to enter a container.
 
     Returns:
@@ -587,6 +590,7 @@ def render_internal_script(
     """
     argv = command.argv()
     if resources is not None and resources.container_image is not None:
+        container_environment = list(normalize_environment(environment))
         if resources.container_launch_mode != _CONTAINER_LAUNCH_MODE:
             raise ValueError("unsupported container launch mode")
         launcher = [
@@ -604,11 +608,17 @@ def render_internal_script(
             launcher.append(
                 "--container-mounts=" + ",".join(mount.render() for mount in resources.mounts)
             )
-        if resources.gpus_per_node == 0:
-            environment_cleanup = ["/usr/bin/env"]
-            for name in _CPU_CONTAINER_ENVIRONMENT_UNSET:
-                environment_cleanup.extend(("-u", name))
-            argv = (*launcher, *environment_cleanup, *argv)
+        if resources.agent_policy_digest is not None:
+            container_environment.append(
+                (AGENT_POLICY_DIGEST_ENVIRONMENT, resources.agent_policy_digest)
+            )
+        if resources.gpus_per_node == 0 or container_environment:
+            environment_wrapper = ["/usr/bin/env"]
+            if resources.gpus_per_node == 0:
+                for name in _CPU_CONTAINER_ENVIRONMENT_UNSET:
+                    environment_wrapper.extend(("-u", name))
+            environment_wrapper.extend(f"{name}={value}" for name, value in container_environment)
+            argv = (*launcher, *environment_wrapper, *argv)
         else:
             argv = (*launcher, *argv)
     return "\n".join(
@@ -742,6 +752,7 @@ class SlurmScheduler:
             input_text=render_internal_script(
                 command,
                 resources,
+                environment=dict(exported_environment),
                 container_launcher=self._container_launcher,
             ),
         )

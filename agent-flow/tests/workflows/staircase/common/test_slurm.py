@@ -209,6 +209,7 @@ def test_fixed_script_uses_resolved_container_launcher(
     )
 
     assert "exec /cm/local/apps/slurm/25.11/bin/srun " in script
+    assert "STAIRCASE_AGENT_POLICY_DIGEST=" not in script
 
 
 def test_cpu_container_unsets_only_injected_placement_environment(
@@ -332,12 +333,18 @@ def test_submit_builds_only_structured_argv_and_parses_identity(
     assert "--export=HF_HOME=/shared/cache,PYTHONUNBUFFERED=1" in argv
     assert "--clusters=alpha" in argv
     assert not any(value == "--wrap" or value.startswith("--wrap=") for value in argv)
-    assert script == render_internal_script(worker_command, resources)
+    assert script == render_internal_script(
+        worker_command,
+        resources,
+        environment={"PYTHONUNBUFFERED": "1", "HF_HOME": "/shared/cache"},
+    )
     assert "exec srun --nodes=1 --ntasks=1 --overlap --cpu-bind=none" in script
     assert script.count("--cpu-bind=none") == 1
     assert "--no-container-mount-home" in script
     assert "--container-image=/images/trtllm.sqsh" in script
     assert "--container-mounts=" in script
+    assert "HF_HOME=/shared/cache" in script
+    assert "PYTHONUNBUFFERED=1" in script
 
 
 def test_submit_uses_controller_resolved_container_launcher(
@@ -392,8 +399,64 @@ def test_agent_policy_binding_is_controller_owned_and_exported(
 
     scheduler.submit(bound, worker_command, _TOKEN)
 
-    argv, _script = executor.calls[0]
+    argv, script = executor.calls[0]
     assert f"--export=STAIRCASE_AGENT_POLICY_DIGEST={'a' * 64}" in argv
+    assert f"STAIRCASE_AGENT_POLICY_DIGEST={'a' * 64}" in script
+    assert script.count("STAIRCASE_AGENT_POLICY_DIGEST=") == 1
+
+    cpu_bound = replace(
+        bound,
+        nodes=1,
+        tasks_per_node=1,
+        gpus_per_node=0,
+        gpu_allocation_padding=False,
+    )
+    environment = {"HF_HOME": "/shared/cache"}
+    cpu_script = render_internal_script(
+        worker_command,
+        cpu_bound,
+        environment=environment,
+    )
+    assert f"STAIRCASE_AGENT_POLICY_DIGEST={'a' * 64}" in cpu_script
+    assert cpu_script.count("STAIRCASE_AGENT_POLICY_DIGEST=") == 1
+    cpu_env_index = cpu_script.index("/usr/bin/env")
+    cpu_unset_index = cpu_script.index("-u CUDA_VISIBLE_DEVICES")
+    cpu_value_index = cpu_script.index("HF_HOME=/shared/cache")
+    cpu_digest_index = cpu_script.index("STAIRCASE_AGENT_POLICY_DIGEST=")
+    cpu_python_index = cpu_script.index("python3")
+    assert cpu_env_index < cpu_unset_index < cpu_value_index < cpu_digest_index < cpu_python_index
+
+    gpu_script = render_internal_script(
+        worker_command,
+        bound,
+        environment=environment,
+    )
+    gpu_env_index = gpu_script.index("/usr/bin/env")
+    gpu_value_index = gpu_script.index("HF_HOME=/shared/cache")
+    gpu_digest_index = gpu_script.index("STAIRCASE_AGENT_POLICY_DIGEST=")
+    gpu_python_index = gpu_script.index("python3")
+    assert gpu_env_index < gpu_value_index < gpu_digest_index < gpu_python_index
+    assert "-u CUDA_VISIBLE_DEVICES" not in gpu_script
+
+
+def test_agent_policy_binding_rejects_task_environment_override(
+    resources: ResourceRequest,
+    worker_command: InternalCommand,
+) -> None:
+    bound = replace(resources, agent_policy_digest="a" * 64)
+    scheduler = SlurmScheduler(
+        executor=ScriptedExecutor([]),
+        cluster="alpha",
+        username="tester",
+    )
+
+    with pytest.raises(ValueError, match="not allowlisted"):
+        scheduler.submit(
+            bound,
+            worker_command,
+            _TOKEN,
+            {"STAIRCASE_AGENT_POLICY_DIGEST": "b" * 64},
+        )
 
 
 def test_submit_renders_exact_typed_afterany_dependency(
