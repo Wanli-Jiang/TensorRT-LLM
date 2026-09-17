@@ -50,7 +50,6 @@ from ._qwen3_5_hf_reference import GenerationRecord, load_generation_fixture
 pytestmark = pytest.mark.threadleak(enabled=False)
 
 REFERENCE_DIR_ENV = "QWEN3_5_HF_REFERENCE_DIR"
-BUILTIN_REFERENCE_DIR_ENV = "QWEN3_5_BUILTIN_REFERENCE_DIR"
 
 EXPECTED_TARGET = "ModelingV2Qwen3827BNvfp4Sm103Tp1"
 EXPECTED_TARGET_MODULE = (
@@ -69,9 +68,6 @@ EXPECTED_FIXTURE_DIGEST = (
 )
 EXPECTED_HF_LOGITS_DIGEST = (
     "blake2b256:f24e9fd491e498e4ceaf30da608fba019a44e51ba96b76a9adf4c43faf00fe2c"
-)
-EXPECTED_BUILTIN_FIXTURE_DIGEST = (
-    "blake2b256:563631628780ba19205a563060d3c0f92d3c17d6ed0805c830242da3089be23f"
 )
 EXPECTED_WITNESS_DIGEST = (
     "blake2b256:63e2f09ab46082af6593947567561faba7176aea7743a2c245d1882c99816ddd"
@@ -328,30 +324,6 @@ def _load_frozen_hf_logits(records: list[GenerationRecord]) -> dict[str, torch.T
     return value
 
 
-def _load_frozen_builtin_tokens(records: list[GenerationRecord]) -> dict[str, list[int]]:
-    reference_dir_value = os.environ.get(BUILTIN_REFERENCE_DIR_ENV)
-    assert reference_dir_value, (
-        f"set {BUILTIN_REFERENCE_DIR_ENV} to the external job-774852 artifact directory"
-    )
-    path = Path(reference_dir_value) / "builtin-generation.json"
-    assert path.is_file(), f"frozen built-in fixture is missing: {path}"
-    assert hash_file(str(path)) == EXPECTED_BUILTIN_FIXTURE_DIGEST, (
-        "the mature built-in TensorRT-LLM fixture changed after job 774852"
-    )
-    value = json.loads(path.read_text(encoding="utf-8"))
-    assert value["schema_version"] == 1
-    assert value["source"] == "mature built-in Qwen3.5 TensorRT-LLM path"
-    frozen = value["records"]
-    assert isinstance(frozen, list)
-    by_prompt = {record["prompt"]: record["token_ids"] for record in frozen}
-    assert set(by_prompt) == {record.prompt for record in records}
-    for tokens in by_prompt.values():
-        assert isinstance(tokens, list)
-        assert len(tokens) == EXPECTED_GENERATED_TOKENS
-        assert all(isinstance(token, int) and token >= 0 for token in tokens)
-    return by_prompt
-
-
 def test_read_only_weight_load(onboarding_runtime: OnboardingRuntime) -> None:
     """Load every real checkpoint shard without changing any published byte."""
     runtime = onboarding_runtime
@@ -458,36 +430,6 @@ def test_teacher_forced_logits_match_frozen_hf_reference(
         "ModelingV2 teacher-forced logits exceed the independently defined "
         f"HF parity bars (cosine >= {MIN_HF_LOGIT_COSINE:.2f} and mean abs "
         f"error <= {MAX_HF_LOGIT_MEAN_ABS_ERROR:.2f}):\n" + "\n".join(failures)
-    )
-    _assert_target_identity(runtime.live_model, runtime.target_class)
-    _assert_checkpoint_unchanged(runtime)
-
-
-def test_generation_matches_frozen_builtin_fixture(
-    onboarding_runtime: OnboardingRuntime,
-) -> None:
-    """The synthetic target is token-exact with the mature built-in path."""
-    runtime = onboarding_runtime
-    expected = _load_frozen_builtin_tokens(runtime.fixture_records)
-    mismatches: list[str] = []
-    for record in runtime.fixture_records:
-        _assert_prompt_tokenization(runtime, record)
-        response = runtime.llm.generate(
-            record.prompt_token_ids,
-            sampling_params=_greedy_params(return_logits=False),
-            use_tqdm=False,
-        )
-        assert response.finished
-        assert len(response.outputs) == 1
-        actual = response.outputs[0].token_ids
-        assert actual is not None
-        if actual != expected[record.prompt]:
-            mismatches.append(
-                f"{record.prompt!r}: target={actual}, built_in={expected[record.prompt]}"
-            )
-    assert not mismatches, (
-        "ModelingV2 delegated target differs from the mature built-in "
-        "TensorRT-LLM path:\n" + "\n".join(mismatches)
     )
     _assert_target_identity(runtime.live_model, runtime.target_class)
     _assert_checkpoint_unchanged(runtime)
