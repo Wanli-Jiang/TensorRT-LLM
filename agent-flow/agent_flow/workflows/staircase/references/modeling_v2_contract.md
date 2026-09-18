@@ -41,9 +41,10 @@ references. The frozen task or approved plan selects one checked-in boundary:
   checkpoint/GPU/topology triple. It may import catalog entries and siblings
   inside its own target directory, but not built-in or sibling-target helpers.
 - **Task-scoped delegated built-in reuse:** an exact synthetic ModelingV2
-  target may use a narrow adapter to the mature built-in model and weight
-  mapper named by the task/plan. No other model-zoo dependency is admitted,
-  and delegation is never a fallback route or a waiver of product gates.
+  target may use a narrow adapter to the finite mature built-in model class set
+  and weight mapper named by the task/plan. Composite outer/inner classes must
+  be enumerated separately. No other model-zoo dependency is admitted, and
+  delegation is never a fallback route or a waiver of product gates.
 
 In both modes the checkpoint is mounted read-only and loaded as published,
 without a target-owned `config.json`; required routing must resolve the exact
@@ -133,7 +134,8 @@ its wrapper, or a shared bug-prone helper. Build the reference ladder from:
 4. the ModelingV2 candidate under test.
 
 Built-in definitions may be read in either mode. Importing model helpers is
-allowed only for the exact task-scoped delegated model/mapper pair. That
+allowed only for the exact task-scoped delegated model-class-set/mapper
+boundary. That
 implementation cannot be the sole oracle for its own correctness.
 
 Use the cheapest gate capable of falsifying the claim:

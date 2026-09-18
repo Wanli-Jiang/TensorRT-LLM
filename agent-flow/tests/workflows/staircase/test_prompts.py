@@ -56,7 +56,7 @@ def test_every_role_carries_control_data_and_reference_boundaries() -> None:
         assert "controller is the sole authority" in prompt, role
         assert "built-in per-model definitions" in prompt, role
         assert "task-scoped delegated built-in reuse" in prompt, role
-        assert "exact mature built-in model and weight mapper" in prompt, role
+        assert "exact finite mature built-in model class set and weight mapper" in prompt, role
         assert "self-contained catalog boundary is authoritative" in prompt, role
         assert "implementation under test" in prompt, role
         assert "Performance is measured evidence" in prompt, role
@@ -90,7 +90,7 @@ def test_plan_roles_enforce_capability_first_atomic_planning() -> None:
     assert "Every WorkItem carries an explicit `domain_input`" in drafter
     assert "complete typed one-variable hypothesis" in drafter
     assert "Respect the frozen workflow mode" in drafter
-    assert "plan records the selected boundary and exact dependency pair" in drafter
+    assert "plan records the selected boundary and exact dependency set" in drafter
 
     assert "Goal is an operation instead of a module/capability" in reviewer
     assert "multiple catalog entries share one atomic item" in reviewer
@@ -178,11 +178,11 @@ def test_assembler_profile_enforces_selected_implementation_boundary() -> None:
     assert "typed catalog-gap request" in coder
     assert "keep the target self-contained and flat" in coder
     assert "task-scoped delegated built-in reuse" in coder
-    assert "exact named mature model and weight mapper" in coder
+    assert "exact named finite mature model class set and weight mapper" in coder
     assert "do not widen that dependency or turn it into fallback" in coder
     assert "workload/tuning knobs out of routing" in coder
     assert "audit flat-forward catalog coverage" in reviewer
-    assert "exact named model/mapper boundary" in reviewer
+    assert "exact named model-class-set/mapper boundary" in reviewer
     assert "undeclared, unbounded, sibling-target, or fallback imports" in reviewer
 
 
@@ -192,10 +192,10 @@ def test_delegated_target_keeps_independent_plan_review_and_qa_gates() -> None:
     qa = _norm(STAIRCASE_PROMPTS.qa)
 
     assert "explicitly authorized for task-scoped delegated built-in reuse" in plan_reviewer
-    assert "name the exact mature built-in model and weight mapper" in plan_reviewer
+    assert "name every class in the exact finite mature built-in model class set" in plan_reviewer
     assert "real boot/generation, independent reference, Reviewer, and QA gates" in plan_reviewer
 
-    assert "frozen task or approved plan names the exact model and weight mapper" in reviewer
+    assert "frozen task or approved plan names every class" in reviewer
     assert "no other built-in dependency is imported" in reviewer
     assert "built-in implementation is not its own oracle" in reviewer
 

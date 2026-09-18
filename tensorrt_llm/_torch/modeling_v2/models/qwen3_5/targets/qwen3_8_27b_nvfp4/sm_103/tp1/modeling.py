@@ -23,7 +23,7 @@ from . import weights as _weights
 TARGET_CHECKPOINT = "qwen3_8_27b_nvfp4"
 TARGET_GPU_ARCH = "sm_103"
 TARGET_PARALLEL = "tp1"
-DELEGATED_MODEL_CLASS = Qwen3_5VLModel
+DELEGATED_MODEL_CLASSES = (Qwen3_5VLModel, Qwen3_5ForCausalLM)
 
 # Qualified names use ``namespace::op``. Unqualified declarations in older
 # targets continue to mean ``trtllm::op`` in the target-contract test.

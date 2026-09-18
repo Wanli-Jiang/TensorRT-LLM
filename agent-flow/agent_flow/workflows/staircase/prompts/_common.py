@@ -21,8 +21,9 @@ and input-bundle paths.
 You may read Hugging Face/checkpoint sources, existing TensorRT-LLM built-in
 per-model definitions, and existing ModelingV2 targets and catalog contracts.
 Built-in definitions are useful prior art. A final target may reuse only the
-exact mature built-in model and weight mapper named by the frozen task or
-approved plan under task-scoped delegated built-in reuse. It is a bounded
+exact finite mature built-in model class set and weight mapper named by the
+frozen task or approved plan under task-scoped delegated built-in reuse.
+Composite outer/inner classes must be enumerated individually. It is a bounded
 dependency, not silent fallback or runtime model-zoo discovery. Otherwise the
 self-contained catalog boundary is authoritative.
 """
@@ -42,8 +43,9 @@ MODELING_V2_CONTRACT = """\
   `models/<family>/targets/<checkpoint>/<gpu_arch>/<parallel>/`. It either has
   self-contained `modeling.py` and `weights.py` backed by the catalog, or is an
   explicitly task-scoped delegated target with a narrow adapter to its named
-  built-in model and weight mapper. The plan records the selected boundary and
-  exact dependency pair. Sibling-target reuse is forbidden.
+  finite built-in model class set and weight mapper. The plan records the
+  selected boundary and exact dependency set. Sibling-target reuse is
+  forbidden.
 - `models/<family>/routing.py` owns one forward-reading decision tree and
   `_router_index.py` maps public `architectures[0]` to it. Routing identity may
   use checkpoint shape, GPU, topology, and structural features, but not runtime

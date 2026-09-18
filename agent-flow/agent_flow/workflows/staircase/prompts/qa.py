@@ -17,10 +17,10 @@ reuse a prior role's mutable session.
 Audit route, weights, architecture-specific certification, and build identity.
 For a self-contained target, audit self-containment and catalog coverage. For
 task-scoped delegated built-in reuse, audit frozen task/plan authorization and
-the exact named model/mapper boundary; reject undeclared reuse or use of that
-dependency as its own oracle. Independently validate the required ladder: static and
-component checks, real checkpoint boot and generation, parity, accuracy, and
-any feature-specific acceptance gate. Confirm the published checkpoint stayed read-only,
+the exact named model-class-set/mapper boundary; reject undeclared reuse or use
+of that dependency as its own oracle. Independently validate the required
+ladder: static and component checks, real checkpoint boot and generation,
+parity, accuracy, and any feature-specific acceptance gate. Confirm the published checkpoint stayed read-only,
 `TRTLLM_MODELING_V2=require` preceded every rank, and the exact synthetic route
 used ModelingV2 and routing did not fall back. Never author or copy a trusted
 gate receipt; return only its controller-supplied

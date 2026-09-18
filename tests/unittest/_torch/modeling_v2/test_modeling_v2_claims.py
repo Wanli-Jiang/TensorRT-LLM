@@ -36,6 +36,20 @@ def _module_path(dotted: str) -> Path:
     return _ROOT / (dotted.replace(".", "/") + ".py")
 
 
+def _checkpoint_tables(routing):
+    """Return independently keyed fingerprint domains for one router."""
+    tables = getattr(routing, "_CHECKPOINT_TABLES", None)
+    if tables is not None:
+        return tuple(tables)
+    return (routing._CHECKPOINTS,)
+
+
+def _target_identity(key: tuple[str, ...]) -> tuple[str, str]:
+    """Extract path identity from a route key with optional variant parts."""
+    assert len(key) >= 2, f"invalid _TARGETS key: {key!r}"
+    return key[0], key[-1]
+
+
 def test_every_routed_architecture_has_an_importable_routing_module():
     for arch in _ARCHS:
         assert routing_module(arch) is not None, arch
@@ -113,20 +127,31 @@ def test_target_identity_matches_its_path(arch):
                 f"{arch}: {name} does not carry path segment {segment!r}"
             )
 
-        assert (checkpoint, parallel) in routing._TARGETS, (
-            f"{arch}: no _TARGETS entry keyed ({checkpoint!r}, {parallel!r})"
-        )
-        assert routing._TARGETS[(checkpoint, parallel)] == name
+        matching_keys = [key for key, value in routing._TARGETS.items() if value == name]
+        assert matching_keys, f"{arch}: no _TARGETS entry produces {name!r}"
+        for key in matching_keys:
+            assert _target_identity(key) == (checkpoint, parallel), (
+                f"{arch}: {name} route key {key!r} does not match path identity "
+                f"({checkpoint!r}, {parallel!r})"
+            )
 
 
 @pytest.mark.parametrize("arch", _ARCHS)
 def test_checkpoint_fingerprints_are_distinct(arch):
-    """Two checkpoints sharing a fingerprint would route to one target."""
+    """Fingerprints are unique within each independently selected domain."""
     routing = routing_module(arch)
-    names = list(routing._CHECKPOINTS.values())
-    assert len(names) == len(set(names)), f"{arch}: duplicate checkpoint names in _CHECKPOINTS"
-    assert set(names) == {c for c, _ in routing._TARGETS}, (
-        f"{arch}: _CHECKPOINTS and _TARGETS name different checkpoints"
+    checkpoint_names = set()
+    for table_index, table in enumerate(_checkpoint_tables(routing)):
+        assert table, f"{arch}: empty checkpoint fingerprint table {table_index}"
+        names = list(table.values())
+        assert len(names) == len(set(names)), (
+            f"{arch}: duplicate checkpoint names in fingerprint table {table_index}"
+        )
+        checkpoint_names.update(names)
+
+    target_checkpoints = {_target_identity(key)[0] for key in routing._TARGETS}
+    assert checkpoint_names == target_checkpoints, (
+        f"{arch}: checkpoint fingerprint tables and _TARGETS name different checkpoints"
     )
 
 
@@ -191,7 +216,8 @@ def test_targets_do_not_share_files():
 
     Targets never import another target's files. The default boundary may use
     catalog entries; a task-scoped delegated target may instead use only its
-    exact built-in model/mapper pair, guarded by its focused contract test.
+    exact built-in model-class set/mapper boundary, guarded by its focused
+    contract test.
     Neither boundary admits a relative import into a sibling target.
     """
     for arch in _ARCHS:
@@ -218,7 +244,7 @@ def test_readme_documents_bounded_delegated_reuse_and_real_gates():
     required = (
         "self-contained flat forward",
         "task-scoped delegated built-in reuse",
-        "one exact mature built-in model and one exact weight mapper",
+        "one exact finite mature built-in model class set and one exact weight mapper",
         "unbounded runtime discovery",
         "silent routing fallback",
         "TRTLLM_MODELING_V2=require",

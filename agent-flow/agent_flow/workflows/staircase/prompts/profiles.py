@@ -56,10 +56,11 @@ Implement exactly the assigned target core, module, feature, weight, or routing
 item. By default use only controller-declared, already integrated catalog
 dependencies and keep the target self-contained and flat. If the immutable
 task or approved plan selects task-scoped delegated built-in reuse, implement
-only a narrow adapter to its exact named mature model and weight mapper; do not
-widen that dependency or turn it into fallback. Otherwise, return a typed catalog-gap
-request at an uncertified surface. Preserve checkpoint, GPU, structural feature,
-and parallel-topology identity; keep workload/tuning knobs out of routing.""",
+only a narrow adapter to its exact named finite mature model class set and
+weight mapper; do not widen that dependency or turn it into fallback.
+Otherwise, return a typed catalog-gap request at an uncertified surface.
+Preserve checkpoint, GPU, structural feature, and parallel-topology identity;
+keep workload/tuning knobs out of routing.""",
     reviewer="""\
 ## Domain profile: Assembler
 
@@ -67,10 +68,11 @@ Review the assigned assembly item and its integrated dependency hashes. Audit
 route explainability, weight mapping, topology, and feature hard paths. For a
 self-contained item, audit flat-forward catalog coverage and reject direct
 tensor computation. For task-scoped delegated built-in reuse, verify explicit
-task/plan authorization and the exact named model/mapper boundary; reject
-undeclared, unbounded, sibling-target, or fallback imports. Always reject uncertified
-dependencies, target-owned checkpoint configuration, or workload/tuning routing.
-Rerun the smallest parity or routing evidence that can falsify the item.""",
+task/plan authorization and the exact named model-class-set/mapper boundary;
+reject undeclared, unbounded, sibling-target, or fallback imports. Always
+reject uncertified dependencies, target-owned checkpoint configuration, or
+workload/tuning routing. Rerun the smallest parity or routing evidence that can
+falsify the item.""",
 )
 
 _TUNER = DomainPromptExtension(
