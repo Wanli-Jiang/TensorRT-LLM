@@ -88,6 +88,12 @@ _INNER_CHECKPOINTS = {
     ): "qwen3_8_27b_nvfp4",
 }
 
+# Composite targets can route both the published outer architecture and an
+# internal decoder architecture.  Keep their fingerprint domains separate:
+# an identical checkpoint name in two domains is intentional, while duplicate
+# fingerprints inside either domain would be ambiguous.
+_CHECKPOINT_TABLES = (_OUTER_CHECKPOINTS, _INNER_CHECKPOINTS)
+
 _TARGETS = {
     ("qwen3_8_27b_nvfp4", "outer", "tp1"): "ModelingV2Qwen3827BNvfp4Sm103Tp1",
     ("qwen3_8_27b_nvfp4", "inner", "tp1"): ("ModelingV2Qwen3827BNvfp4TextSm103Tp1"),

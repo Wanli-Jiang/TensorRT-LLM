@@ -14,13 +14,17 @@ from tensorrt_llm._torch.modeling_v2.models.qwen3_5.targets.qwen3_8_27b_nvfp4.sm
     weights,
 )
 from tensorrt_llm._torch.models.checkpoints.hf.qwen3_5_weight_mapper import Qwen3_5MoeHfWeightMapper
-from tensorrt_llm._torch.models.modeling_qwen3_5 import Qwen3_5VLModel
+from tensorrt_llm._torch.models.modeling_qwen3_5 import Qwen3_5ForCausalLM, Qwen3_5VLModel
 from tensorrt_llm._torch.pyexecutor import model_loader as model_loader_mod
 
 
 def test_target_is_the_modeling_v2_identity_for_the_production_dense_model():
     assert issubclass(modeling.ModelingV2Qwen3827BNvfp4Sm103Tp1, Qwen3_5VLModel)
-    assert modeling.DELEGATED_MODEL_CLASS is Qwen3_5VLModel
+    assert issubclass(
+        modeling.ModelingV2Qwen3827BNvfp4TextSm103Tp1,
+        Qwen3_5ForCausalLM,
+    )
+    assert modeling.DELEGATED_MODEL_CLASSES == (Qwen3_5VLModel, Qwen3_5ForCausalLM)
     assert modeling.TARGET_CHECKPOINT == "qwen3_8_27b_nvfp4"
     assert modeling.TARGET_GPU_ARCH == "sm_103"
     assert modeling.TARGET_PARALLEL == "tp1"

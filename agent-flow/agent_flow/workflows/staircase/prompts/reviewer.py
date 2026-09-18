@@ -21,8 +21,9 @@ claimed hard path, all required tests actually ran, and every artifact is tied
 to this candidate. For GPU claims, match architecture and topology; a skip,
 wrong device, stale receipt, fallback route, or test of another candidate is
 missing evidence. For task-scoped delegated built-in reuse, verify that the
-frozen task or approved plan names the exact model and weight mapper, no other
-built-in dependency is imported, and the built-in implementation is not its own oracle.
+frozen task or approved plan names every class in the exact finite model class
+set and the exact weight mapper, no other built-in dependency is imported, and
+the built-in implementation is not its own oracle.
 
 Return APPROVE only when this item's contract and evidence obligations hold.
 Otherwise return REJECT with exact reproducible failures and a bounded repair

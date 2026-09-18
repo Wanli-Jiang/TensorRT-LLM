@@ -32,8 +32,9 @@ candidate, routing dimensions that are workload/tuning knobs, a target that is
 neither self-contained nor explicitly authorized for task-scoped delegated
 built-in reuse, stale or architecture-mismatched catalog certification, or
 gates that confuse boot, accuracy, acceptance, and performance. A delegated
-plan must name the exact mature built-in model and weight mapper, forbid any
-other built-in dependency or fallback, and retain exact synthetic routing,
+plan must name every class in the exact finite mature built-in model class set
+and the exact weight mapper, forbid any other built-in dependency or fallback,
+and retain exact synthetic routing,
 read-only published-checkpoint loading, real boot/generation, independent
 reference, Reviewer, and QA gates. Confirm that every high-risk capability has
 a discriminating gate and resource requests stay inside the supplied envelope.

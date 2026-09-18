@@ -10,11 +10,12 @@ The default implementation is a self-contained flat forward assembled from
 
 A frozen task or approved plan may instead select **task-scoped delegated
 built-in reuse** for new-model bring-up. That exception is a narrow adapter to
-one exact mature built-in model and one exact weight mapper named by the frozen
-task or approved plan. It does not admit sibling targets, arbitrary model-zoo
-helpers, unbounded runtime discovery, or silent routing fallback. The checked-in
-synthetic class remains the ModelingV2 identity and must pass the same real
-product gates.
+one exact finite mature built-in model class set and one exact weight mapper
+named by the frozen task or approved plan. Composite models may need distinct
+outer and inner model classes, but every class must be enumerated and pinned.
+It does not admit sibling targets, arbitrary model-zoo helpers, unbounded
+runtime discovery, or silent routing fallback. The checked-in synthetic class
+remains the ModelingV2 identity and must pass the same real product gates.
 
 ## Using it
 
@@ -63,10 +64,11 @@ Every target records one of two reviewable boundaries:
    computation. A missing catalog surface is a dependency to onboard, not a
    reason to copy a built-in helper.
 2. **Task-scoped delegated target.** `modeling.py` and `weights.py` are a
-   deployment-specific adapter to the exact built-in model and weight mapper
-   named by the frozen task or approved plan. Imports outside that pair are a
-   contract failure. Delegation cannot select an implementation dynamically or
-   rescue a route that failed to match.
+   deployment-specific adapter to the exact finite built-in model class set and
+   weight mapper named by the frozen task or approved plan. Imports outside
+   that closed set and mapper boundary are a contract failure. Delegation
+   cannot select an implementation dynamically or rescue a route that failed
+   to match.
 
 Both boundaries keep routing, checkpoint/GPU/topology identity, published
 checkpoint immutability, and evidence obligations unchanged. A delegated
@@ -190,7 +192,7 @@ route, evidence, or deployment contract into the built-in zoo.
 Before a real gate starts, every rank exports `TRTLLM_MODELING_V2=require`.
 Static evidence proves the exact synthetic class and route, target identity,
 and either complete catalog self-containment or the exact declared delegated
-model/mapper pair. `auto`, a resolver-only assertion, a skip, or a run that
+model-class-set/mapper boundary. `auto`, a resolver-only assertion, a skip, or a run that
 booted the built-in class is not target evidence.
 
 1. **Boot and generation** — minutes, binary. Load the real published

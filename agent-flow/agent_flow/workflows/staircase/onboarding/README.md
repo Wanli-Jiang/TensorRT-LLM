@@ -6,9 +6,10 @@
 Onboarding creates and validates one ModelingV2 deployment target for an
 explicit checkpoint, GPU architecture, structural feature set, and parallel
 topology. The target is self-contained/catalog-backed by default, or may use
-task-scoped delegated built-in reuse of one exact model and weight mapper when
-the frozen task or approved plan says so. Staircase is the control plane; product code
-stays in `tensorrt_llm/_torch/modeling_v2/` and its existing test surfaces.
+task-scoped delegated built-in reuse of one exact finite model class set and
+weight mapper when the frozen task or approved plan says so. Staircase is the
+control plane; product code stays in `tensorrt_llm/_torch/modeling_v2/` and its
+existing test surfaces.
 
 ## Prepare a schema-v2 task
 
