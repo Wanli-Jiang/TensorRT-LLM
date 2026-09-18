@@ -32,7 +32,7 @@ import subprocess
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePath
-from typing import Mapping, Protocol, Sequence
+from typing import Mapping, NoReturn, Protocol, Sequence
 
 _SCHEDULER_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 _SUBMISSION_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{7,63}\Z")
@@ -51,6 +51,9 @@ _MAX_CAPTURED_ERROR_CHARS = 4_000
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
 _SINGLE_NODE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}\Z")
 _CONTAINER_LAUNCH_MODE = "in_allocation_srun"
+_READ_ONLY_COMMANDS = frozenset({"sacct", "squeue"})
+_READ_ONLY_COMMAND_ATTEMPTS = 2
+_SQUEUE_MISSING_JOB_ERROR = "Invalid job id specified"
 AGENT_POLICY_DIGEST_ENVIRONMENT = "STAIRCASE_AGENT_POLICY_DIGEST"
 
 # Pyxis base images can define CUDA and distributed-placement variables even
@@ -780,7 +783,7 @@ class SlurmScheduler:
         ]
         self._append_cluster(queue_argv, identity.cluster)
         queue_records = _parse_observation_records(
-            self._run(queue_argv).stdout,
+            self._run_exact_job_queue(queue_argv).stdout,
             identity,
             ObservationSource.QUEUE,
         )
@@ -994,7 +997,7 @@ class SlurmScheduler:
         ]
         self._append_cluster(queue_argv, identity.cluster)
         queue_records = _parse_ownership_records(
-            self._run(queue_argv).stdout,
+            self._run_exact_job_queue(queue_argv).stdout,
             identity,
             token,
             self._username,
@@ -1059,7 +1062,7 @@ class SlurmScheduler:
         ]
         self._append_cluster(queue_argv, identity.cluster)
         queue = _parse_placement_evidence(
-            self._run(queue_argv).stdout,
+            self._run_exact_job_queue(queue_argv).stdout,
             identity,
             token,
             self._username,
@@ -1157,13 +1160,55 @@ class SlurmScheduler:
             argv.append(f"--clusters={cluster}")
 
     def _run(self, argv: Sequence[str], *, input_text: str | None = None) -> CommandResult:
-        result = self._executor.run(tuple(argv), input_text=input_text)
+        result = self._execute(argv, input_text=input_text)
         if result.returncode != 0:
-            detail = (result.stderr.strip() or result.stdout.strip())[:_MAX_CAPTURED_ERROR_CHARS]
-            raise SlurmCommandError(
-                f"Slurm command failed ({result.returncode}): {_display_argv(argv)}: {detail}"
-            )
+            self._raise_command_failure(argv, result)
         return result
+
+    def _run_exact_job_queue(self, argv: Sequence[str]) -> CommandResult:
+        """Treat a purged exact job as absent from ``squeue`` and query accounting.
+
+        Some Slurm deployments return exit status 1 instead of an empty result
+        when ``squeue --jobs=<terminal-id>`` no longer has the allocation.  The
+        exact job is still authoritative in ``sacct``; only this narrow,
+        read-only response is normalized to an empty queue result.
+        """
+        result = self._execute(argv)
+        if result.returncode == 0:
+            return result
+        if (
+            argv
+            and argv[0] == "squeue"
+            and any(value.startswith("--jobs=") for value in argv[1:])
+            and result.returncode == 1
+            and not result.stdout.strip()
+            and _SQUEUE_MISSING_JOB_ERROR in result.stderr
+        ):
+            return CommandResult(0, "", result.stderr)
+        self._raise_command_failure(argv, result)
+
+    def _execute(
+        self,
+        argv: Sequence[str],
+        *,
+        input_text: str | None = None,
+    ) -> CommandResult:
+        """Retry only idempotent queue/accounting commands after transport errors."""
+        attempts = _READ_ONLY_COMMAND_ATTEMPTS if argv and argv[0] in _READ_ONLY_COMMANDS else 1
+        for attempt in range(attempts):
+            try:
+                return self._executor.run(tuple(argv), input_text=input_text)
+            except SlurmCommandError:
+                if attempt + 1 == attempts:
+                    raise
+        raise AssertionError("scheduler command retry loop did not return")
+
+    @staticmethod
+    def _raise_command_failure(argv: Sequence[str], result: CommandResult) -> NoReturn:
+        detail = (result.stderr.strip() or result.stdout.strip())[:_MAX_CAPTURED_ERROR_CHARS]
+        raise SlurmCommandError(
+            f"Slurm command failed ({result.returncode}): {_display_argv(argv)}: {detail}"
+        )
 
 
 @dataclass(frozen=True)

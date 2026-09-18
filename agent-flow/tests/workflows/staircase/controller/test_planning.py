@@ -37,10 +37,12 @@ from agent_flow.workflows.staircase.common.slurm import (
     FakeScheduler,
     InternalCommand,
     JobIdentity,
+    JobObservation,
     JobOwnership,
     JobStatus,
     ObservationSource,
     ResourceRequest,
+    SchedulerError,
 )
 from agent_flow.workflows.staircase.common.submission_recovery import SubmissionRecoveryPolicy
 from agent_flow.workflows.staircase.controller.planning import (
@@ -103,6 +105,24 @@ _TASK_DIGEST = "a" * 64
 
 class InjectedCrash(RuntimeError):
     """Crash injected after the fake scheduler has accepted a job."""
+
+
+class TransientObservationScheduler(FakeScheduler):
+    """Fail one owned observation without changing authoritative job state."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures_remaining = 1
+
+    def observe_owned(
+        self,
+        identity: JobIdentity,
+        submission_token: str,
+    ) -> JobObservation:
+        if self.failures_remaining:
+            self.failures_remaining -= 1
+            raise SchedulerError("transient scheduler read failure")
+        return super().observe_owned(identity, submission_token)
 
 
 class CrashAfterSubmitScheduler:
@@ -653,6 +673,30 @@ def test_crash_after_submit_is_adopted_by_token_without_duplicate(
     assert adopted.event is PlanningEvent.ADOPTED
     assert len(scheduler.submissions) == 1
     assert load_state(workspace / STATE_FILENAME).planning_attempts[-1].job is not None
+
+
+def test_transient_observation_failure_waits_without_mutating_state(
+    task_and_workspace: tuple[NormalizedTask, Path],
+) -> None:
+    task, workspace = task_and_workspace
+    scheduler = TransientObservationScheduler()
+    engine = _engine(task, workspace, scheduler)
+
+    engine.tick()
+    submitted = engine.tick()
+    before = load_state(workspace / STATE_FILENAME)
+
+    waiting = engine.tick()
+
+    assert waiting.event is PlanningEvent.NO_CHANGE
+    assert waiting.next_action is PlanningAction.WAIT_FOR_SCHEDULER
+    assert waiting.scheduler_status is JobStatus.UNKNOWN
+    assert load_state(workspace / STATE_FILENAME) == before
+
+    recovered = engine.tick()
+    assert recovered.event is PlanningEvent.SCHEDULER_UPDATED
+    assert recovered.scheduler_status is JobStatus.PENDING
+    assert recovered.attempt_id == submitted.attempt_id
 
 
 def test_crash_before_submit_retries_only_after_bounded_absence_proof(

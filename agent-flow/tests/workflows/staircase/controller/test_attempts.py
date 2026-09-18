@@ -38,6 +38,7 @@ from agent_flow.workflows.staircase.common.slurm import (
     InternalCommand,
     InternalEntrypoint,
     JobIdentity,
+    JobObservation,
     JobStatus,
     ObservationSource,
     ResourceRequest,
@@ -74,6 +75,24 @@ from agent_flow.workflows.staircase.state import (
 TASK_DIGEST = "a" * 64
 CANDIDATE_DIGEST = "b" * 64
 TOKEN = "attempt-token-0001"
+
+
+class TransientObservationScheduler(FakeScheduler):
+    """Fail one owned observation without changing authoritative job state."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures_remaining = 1
+
+    def observe_owned(
+        self,
+        identity: JobIdentity,
+        submission_token: str,
+    ) -> JobObservation:
+        if self.failures_remaining:
+            self.failures_remaining -= 1
+            raise SchedulerError("transient scheduler read failure")
+        return super().observe_owned(identity, submission_token)
 
 
 def _attempt(
@@ -678,6 +697,33 @@ def test_queue_to_accounting_unknown_has_bounded_grace(tmp_path: Path) -> None:
         cursor = lost.unknown_observations
     assert lost.attempt.status is AttemptStatus.LOST
     assert lost.attempt.scheduler_state == JobStatus.UNKNOWN.value
+
+
+def test_transient_observation_failure_waits_without_consuming_unknown_grace(
+    tmp_path: Path,
+) -> None:
+    scheduler = TransientObservationScheduler()
+    running, execution, _identity = _scheduled_attempt(tmp_path, scheduler)
+
+    waiting = tick_attempt(
+        running,
+        scheduler=scheduler,
+        execution=execution,
+        unknown_observations=2,
+    )
+
+    assert waiting.action is AttemptAction.WAITING_FOR_ACCOUNTING
+    assert waiting.attempt == running
+    assert waiting.unknown_observations == 2
+
+    recovered = tick_attempt(
+        waiting.attempt,
+        scheduler=scheduler,
+        execution=execution,
+        unknown_observations=waiting.unknown_observations,
+    )
+    assert recovered.action is AttemptAction.OBSERVED
+    assert recovered.attempt.status is AttemptStatus.RUNNING
 
 
 @pytest.mark.parametrize(
