@@ -779,7 +779,18 @@ class PlanningEngine:
         identity = self._scheduler_job(cast(JobReference, attempt.job))
         if attempt.submission_token is None:
             raise PlanningError("submitted planning attempt has no immutable token")
-        observation = self._scheduler.observe_owned(identity, attempt.submission_token)
+        try:
+            observation = self._scheduler.observe_owned(identity, attempt.submission_token)
+        except SchedulerError:
+            return self._result(
+                state,
+                self._phase_for_role(attempt.role),
+                PlanningEvent.NO_CHANGE,
+                PlanningAction.WAIT_FOR_SCHEDULER,
+                attempt=attempt,
+                job=identity,
+                scheduler_status=JobStatus.UNKNOWN,
+            )
         if observation.status is JobStatus.UNKNOWN:
             return self._result(
                 state,

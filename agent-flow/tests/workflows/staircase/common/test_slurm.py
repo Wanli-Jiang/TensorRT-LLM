@@ -49,7 +49,7 @@ _TOKEN = "attempt-00000001"
 class ScriptedExecutor:
     """Return scripted command results while retaining every exact invocation."""
 
-    def __init__(self, results: Sequence[CommandResult]) -> None:
+    def __init__(self, results: Sequence[CommandResult | SlurmCommandError]) -> None:
         self._results = list(results)
         self.calls: list[tuple[tuple[str, ...], str | None]] = []
 
@@ -57,7 +57,10 @@ class ScriptedExecutor:
         self.calls.append((tuple(argv), input_text))
         if not self._results:
             raise AssertionError(f"unexpected scheduler invocation: {argv}")
-        return self._results.pop(0)
+        result = self._results.pop(0)
+        if isinstance(result, SlurmCommandError):
+            raise result
+        return result
 
 
 @pytest.fixture
@@ -542,6 +545,24 @@ def test_command_failure_redacts_exported_environment(
     assert "/private/cache" not in str(error.value)
 
 
+def test_submit_does_not_retry_an_ambiguous_transport_failure(
+    resources: ResourceRequest,
+    worker_command: InternalCommand,
+) -> None:
+    executor = ScriptedExecutor(
+        [
+            SlurmCommandError("Slurm command timed out: sbatch"),
+            CommandResult(0, "12345\n"),
+        ]
+    )
+    scheduler = SlurmScheduler(executor=executor, username="tester")
+
+    with pytest.raises(SlurmCommandError, match="timed out"):
+        scheduler.submit(resources, worker_command, _TOKEN)
+
+    assert len(executor.calls) == 1
+
+
 def test_observe_prefers_live_queue_record() -> None:
     executor = ScriptedExecutor(
         [CommandResult(0, "12345|RUNNING|node-a|staircase:attempt-00000001\n")]
@@ -554,6 +575,23 @@ def test_observe_prefers_live_queue_record() -> None:
     assert observation.reason == "node-a"
     assert observation.source is ObservationSource.QUEUE
     assert len(executor.calls) == 1
+
+
+def test_observe_retries_one_read_only_transport_failure() -> None:
+    row = "12345|RUNNING|node-a|staircase:attempt-00000001\n"
+    executor = ScriptedExecutor(
+        [
+            SlurmCommandError("Slurm command timed out: squeue"),
+            CommandResult(0, row),
+        ]
+    )
+    scheduler = SlurmScheduler(executor=executor, username="tester")
+
+    observation = scheduler.observe(JobIdentity("12345"))
+
+    assert observation.status is JobStatus.RUNNING
+    assert len(executor.calls) == 2
+    assert executor.calls[0] == executor.calls[1]
 
 
 @pytest.mark.parametrize(
@@ -586,6 +624,38 @@ def test_observe_terminal_accounting_states(
     assert observation.status is expected_status
     assert observation.status.terminal is True
     assert observation.source is ObservationSource.ACCOUNTING
+
+
+def test_observe_treats_purged_exact_squeue_job_as_accounting_only() -> None:
+    executor = ScriptedExecutor(
+        [
+            CommandResult(
+                1,
+                stderr="slurm_load_jobs error: Invalid job id specified\n",
+            ),
+            CommandResult(
+                0,
+                f"12345|COMPLETED|None|staircase:{_TOKEN}\n",
+            ),
+        ]
+    )
+    scheduler = SlurmScheduler(executor=executor, username="tester")
+
+    observation = scheduler.observe(JobIdentity("12345"))
+
+    assert observation.status is JobStatus.COMPLETED
+    assert observation.source is ObservationSource.ACCOUNTING
+    assert len(executor.calls) == 2
+
+
+def test_observe_rejects_unrelated_exact_squeue_failure() -> None:
+    executor = ScriptedExecutor([CommandResult(1, stderr="permission denied\n")])
+    scheduler = SlurmScheduler(executor=executor, username="tester")
+
+    with pytest.raises(SlurmCommandError, match="permission denied"):
+        scheduler.observe(JobIdentity("12345"))
+
+    assert len(executor.calls) == 1
 
 
 def test_observe_accounting_lag_is_unknown_not_failure() -> None:
@@ -675,6 +745,25 @@ def test_ownership_mismatch_fails_closed_after_accounting_lookup() -> None:
     ).verify_ownership(JobIdentity("12345", cluster="beta"), _TOKEN)
     assert not cluster_mismatch.matched
     assert "cluster" in cluster_mismatch.reason
+
+
+def test_ownership_treats_purged_exact_squeue_job_as_accounting_only() -> None:
+    executor = ScriptedExecutor(
+        [
+            CommandResult(
+                1,
+                stderr="slurm_load_jobs error: Invalid job id specified\n",
+            ),
+            CommandResult(0, f"12345|tester|staircase:{_TOKEN};label=smith\n"),
+        ]
+    )
+    scheduler = SlurmScheduler(executor=executor, username="tester")
+
+    ownership = scheduler.verify_ownership(JobIdentity("12345"), _TOKEN)
+
+    assert ownership.matched
+    assert ownership.source is ObservationSource.ACCOUNTING
+    assert len(executor.calls) == 2
 
 
 def test_fake_owned_observation_accepts_exact_scheduler_metadata(
@@ -774,6 +863,27 @@ def test_single_node_placement_falls_back_to_exact_accounting_allocation() -> No
         "--format=JobIDRaw,User,Comment,NNodes,NodeList",
         "--clusters=alpha",
     )
+
+
+def test_placement_treats_purged_exact_squeue_job_as_accounting_only() -> None:
+    row = f"12345|tester|staircase:{_TOKEN};label=smith|1|node-a\n"
+    executor = ScriptedExecutor(
+        [
+            CommandResult(
+                1,
+                stderr="slurm_load_jobs error: Invalid job id specified\n",
+            ),
+            CommandResult(0, row),
+        ]
+    )
+    scheduler = SlurmScheduler(executor=executor, username="tester")
+
+    evidence = scheduler.verify_single_node_placement(JobIdentity("12345"), _TOKEN)
+
+    assert evidence.matched
+    assert evidence.node_list == "node-a"
+    assert evidence.source is ObservationSource.ACCOUNTING
+    assert len(executor.calls) == 2
 
 
 def test_single_node_placement_accounting_lag_is_unmatched_unknown() -> None:

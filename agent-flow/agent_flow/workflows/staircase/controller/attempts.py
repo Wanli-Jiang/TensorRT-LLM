@@ -830,10 +830,17 @@ def _observe_known_job(
         raise AttemptEngineError("submitted attempt has no persisted scheduler identity")
     if attempt.submission_token is None:
         raise AttemptEngineError("submitted attempt has no persisted submission token")
-    observation = scheduler.observe_owned(
-        _scheduler_identity(attempt.job),
-        attempt.submission_token,
-    )
+    try:
+        observation = scheduler.observe_owned(
+            _scheduler_identity(attempt.job),
+            attempt.submission_token,
+        )
+    except SchedulerError:
+        return AttemptTickResult(
+            attempt,
+            AttemptAction.WAITING_FOR_ACCOUNTING,
+            unknown_observations=unknown_observations,
+        )
     if observation.status is JobStatus.UNKNOWN:
         unknown_count = unknown_observations + 1
         if unknown_count <= policy.accounting_unknown_grace_ticks:
