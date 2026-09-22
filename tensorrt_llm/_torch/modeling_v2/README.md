@@ -1,15 +1,20 @@
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # ModelingV2
 
-One self-contained modeling codebase per deployment target, beside the
-built-in model zoo rather than inside it.
+One deployment-specific synthetic target per (checkpoint, GPU architecture,
+parallel topology) triple, beside the built-in model zoo rather than inside it.
+The default implementation is a self-contained flat forward assembled from
+`catalog/` entries and sharing no code with sibling targets.
 
-Where `_torch/models/modeling_deepseekv3.py` is one class serving V3, V3-Lite,
-R1 and V3.2 across every GPU generation and parallel topology,
-`_torch/modeling_v2/models/deepseek_v3/` is one flat forward per (checkpoint,
-GPU architecture, parallel topology) triple — assembled only from `catalog/`
-entries, sharing nothing with its siblings, and trusted through accuracy gates
-instead of shared abstractions. The one-to-one correspondence between
-`models/<x>/` here and `modeling_<x>.py` there is the point of the exercise.
+A frozen task or approved plan may instead select **task-scoped delegated
+built-in reuse** for new-model bring-up. That exception is a narrow adapter to
+one exact mature built-in model and one exact weight mapper named by the frozen
+task or approved plan. It does not admit sibling targets, arbitrary model-zoo
+helpers, unbounded runtime discovery, or silent routing fallback. The checked-in
+synthetic class remains the ModelingV2 identity and must pass the same real
+product gates.
 
 ## Using it
 
@@ -45,7 +50,34 @@ The predecessor `MODELING_V2_TARGET` is gone. It named a *target*; this names
 only a mode, and routing picks the target from the configuration.
 
 The checkpoint is read exactly as published, with no target-owned
-`config.json`.
+`config.json`, and its mounted files remain read-only. A delegated target still
+resolves its exact synthetic class under `TRTLLM_MODELING_V2=require`; calling
+its declared dependency internally is not top-level resolver fallback.
+
+## Implementation boundaries
+
+Every target records one of two reviewable boundaries:
+
+1. **Self-contained catalog target (default).** `modeling.py` and `weights.py`
+   contain the flat target and use certified catalog entries for tensor
+   computation. A missing catalog surface is a dependency to onboard, not a
+   reason to copy a built-in helper.
+2. **Task-scoped delegated target.** `modeling.py` and `weights.py` are a
+   deployment-specific adapter to the exact built-in model and weight mapper
+   named by the frozen task or approved plan. Imports outside that pair are a
+   contract failure. Delegation cannot select an implementation dynamically or
+   rescue a route that failed to match.
+
+Both boundaries keep routing, checkpoint/GPU/topology identity, published
+checkpoint immutability, and evidence obligations unchanged. A delegated
+built-in dependency is part of the implementation under test, so its output is
+not an independent correctness oracle.
+
+A delegated target has a focused contract test that pins the exact model and
+mapper. The Qwen3.8 example is
+[`test_modeling_v2_qwen3_8_27b_nvfp4.py`](../../../tests/unittest/_torch/modeling_v2/test_modeling_v2_qwen3_8_27b_nvfp4.py);
+its real checkpoint, route, generation, and independent-reference gates are in
+[`test_qwen3_5_modeling_v2_onboarding.py`](../../../tests/integration/defs/modeling_v2/test_qwen3_5_modeling_v2_onboarding.py).
 
 ## How a config finds its target
 
@@ -101,7 +133,7 @@ explain.py          why a configuration routed where it did
 models/<family>/
   routing.py        one forward-reading decision tree per architecture family
   targets/<checkpoint>/<gpu arch>/<parallel>/
-                    modeling.py  weights.py
+                    modeling.py  weights.py   one declared boundary per target
 catalog/            the kernel vocabulary: contract .md + wrapper .py
 ```
 
@@ -148,16 +180,25 @@ inheriting the built-in constraints without inheriting the built-in guards:
   so decorators in a subpackage are invisible to it — putting synthetic names
   in the built-in static index would fail its staleness assertion.
 
-Conceptually `models/` means "one architecture, one class, shared across
-checkpoints", which is the opposite of what this package is for.
+Conceptually `_torch/models/` owns reusable production implementations, while
+this package owns exact deployment target identities. A delegated target may
+reuse one named production implementation without moving its synthetic class,
+route, evidence, or deployment contract into the built-in zoo.
 
 ## Gates
 
-1. **Boot** — minutes, binary. `examples/llm-api/quickstart_advanced.py` with
-   the target's topology flags and `TRTLLM_MODELING_V2=require` exported. Engine
-   cold start, weight-manifest coverage, a handful of greedy continuations.
-   Catches catastrophes, not accuracy. A variant that changes the forward gets
-   its own minutes-scale gate on the same footing.
+Before a real gate starts, every rank exports `TRTLLM_MODELING_V2=require`.
+Static evidence proves the exact synthetic class and route, target identity,
+and either complete catalog self-containment or the exact declared delegated
+model/mapper pair. `auto`, a resolver-only assertion, a skip, or a run that
+booted the built-in class is not target evidence.
+
+1. **Boot and generation** — minutes, binary. Load the real published
+   checkpoint read-only with the target's topology, prove the live engine uses
+   the exact synthetic class, verify weight coverage, and run deterministic
+   greedy generation. Catches construction and fallback failures, not
+   correctness. A variant that changes the forward gets its own minutes-scale
+   gate on the same footing.
 2. **Accuracy** — the release criterion. `trtllm-eval` with the protocol from
    `tests/integration/defs/accuracy/references/` and `TRTLLM_MODELING_V2=require`
    exported. One-sided: measured >= reference − tol. This is the gate CI runs,
@@ -170,6 +211,13 @@ checkpoints", which is the opposite of what this package is for.
    checkpoint under stock in-tree modeling at the same workload and the same
    `speculative_config` — i.e. `TRTLLM_MODELING_V2=off` versus `=require`,
    which is now one variable rather than two harnesses.
+
+High-risk correctness uses an independent Hugging Face implementation, minimal
+oracle, or frozen golden with immutable provenance. A delegated built-in model,
+its weight mapper, or a helper shared with the target cannot be the only
+reference. Gate artifacts bind the exact checkpoint, target, build, GPU,
+topology, command, and result and must be independently reviewed; boot alone
+never certifies onboarding.
 
 Compare a variant against an identity run **in the same session**: one target
 measured 94.7688 and 95.0720 on a bit-identical forward a day apart, so a
@@ -276,7 +324,7 @@ which turns a drifting engine from a wrong answer into a loud failure.
 ## Not migrated in this batch
 
 The 13 catalog entries no migrated target calls (listed in `catalog/index.yaml`),
-the five other targets, and the agent definitions. A later target that needs
-one of those entries must bring its contract **and** its receipt, not just the
-wrapper — otherwise that target consumes an op with no certification record at
-all.
+the five other targets, and the agent definitions. A later self-contained
+target that needs one of those entries must bring its contract **and** its
+receipt, not just the wrapper — otherwise that target consumes an op with no
+certification record at all.

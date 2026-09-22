@@ -43,13 +43,20 @@ def _target_ids():
     return [name for name, _ in _target_modules()]
 
 
+def _has_declared_op(declaration: str) -> bool:
+    namespace, separator, name = declaration.partition("::")
+    if not separator:
+        namespace, name = "trtllm", namespace
+    return hasattr(getattr(torch.ops, namespace), name)
+
+
 @pytest.mark.parametrize("name,module", list(_target_modules()), ids=_target_ids())
 def test_every_declared_op_exists(name, module):
     """A named op that is not registered is a build the target cannot run on."""
     declared = getattr(module, "REQUIRED_TRTLLM_OPS", None)
     assert declared, f"{name}: modeling.py declares no REQUIRED_TRTLLM_OPS"
 
-    missing = [op for op in declared if not hasattr(torch.ops.trtllm, op)]
+    missing = [op for op in declared if not _has_declared_op(op)]
     assert not missing, (
         f"{name} names {len(missing)} op(s) this build does not register: "
         f"{', '.join(missing)}. Either the op was renamed upstream and the "

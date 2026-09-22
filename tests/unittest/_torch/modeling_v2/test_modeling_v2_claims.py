@@ -189,9 +189,10 @@ def test_every_target_ships_both_products():
 def test_targets_do_not_share_files():
     """Isolation is the property being demonstrated; measure it.
 
-    Targets are allowed to import the catalog and nothing else of each
-    other's. A shared helper between two targets is the first step back to
-    the abstraction this package exists to avoid.
+    Targets never import another target's files. The default boundary may use
+    catalog entries; a task-scoped delegated target may instead use only its
+    exact built-in model/mapper pair, guarded by its focused contract test.
+    Neither boundary admits a relative import into a sibling target.
     """
     for arch in _ARCHS:
         routing = routing_module(arch)
@@ -205,6 +206,36 @@ def test_targets_do_not_share_files():
                         continue  # sibling within the target
                     assert tail.startswith("catalog"), (
                         f"{name}: {source_file.name} reaches outside its own "
-                        f"directory for {tail!r}; targets may import the "
-                        f"catalog and nothing else"
+                        f"directory for {tail!r}; relative cross-target "
+                        f"imports are forbidden"
                     )
+
+
+def test_readme_documents_bounded_delegated_reuse_and_real_gates():
+    """The authoritative product contract must describe both target modes."""
+    readme = re.sub(r"\s+", " ", (_ROOT / "README.md").read_text(encoding="utf-8"))
+
+    required = (
+        "self-contained flat forward",
+        "task-scoped delegated built-in reuse",
+        "one exact mature built-in model and one exact weight mapper",
+        "unbounded runtime discovery",
+        "silent routing fallback",
+        "TRTLLM_MODELING_V2=require",
+        "exact synthetic class",
+        "real published checkpoint read-only",
+        "independent correctness oracle",
+        "Boot and generation",
+        "test_modeling_v2_qwen3_8_27b_nvfp4.py",
+        "test_qwen3_5_modeling_v2_onboarding.py",
+    )
+    for phrase in required:
+        assert phrase in readme
+
+    repository_root = _ROOT.parents[2]
+    linked_tests = (
+        repository_root / "tests/unittest/_torch/modeling_v2/test_modeling_v2_qwen3_8_27b_nvfp4.py",
+        repository_root
+        / "tests/integration/defs/modeling_v2/test_qwen3_5_modeling_v2_onboarding.py",
+    )
+    assert all(path.is_file() for path in linked_tests)

@@ -23,6 +23,7 @@ agent-team = "agent_flow.workflows.agent_team.cli:main"
 modeling-bringup = "agent_flow.workflows.modeling_bringup.cli:main"
 perf-analyze = "agent_flow.workflows.perf_analyze.cli:main"
 perf-optimize = "agent_flow.workflows.perf_optimize.cli:main"
+staircase = "agent_flow.workflows.staircase.cli:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
@@ -35,6 +36,14 @@ include = ["agent_flow*"]
 # taxonomy into its workspace), so they must survive a non-editable install.
 [tool.setuptools.package-data]
 "agent_flow.workflows.perf_analyze" = ["assets/*.json"]
+"agent_flow.workflows.staircase" = [
+    "*.md",
+    "onboarding/*.yaml",
+    "onboarding/*.md",
+    "tuning/*.yaml",
+    "tuning/*.md",
+    "references/*.md",
+]
 
 ####################################################################################################
 ###############################  LINTING, FORMATTING AND TESTING CONFIGURATION  ####################

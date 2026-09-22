@@ -35,6 +35,8 @@ from tensorrt_llm._torch.models.modeling_utils import (
     get_registered_model_class,
 )
 from tensorrt_llm.mapping import Mapping
+from tensorrt_llm.models.modeling_utils import QuantConfig
+from tensorrt_llm.quantization import QuantAlgo
 
 _SM103 = (10, 3)
 
@@ -71,6 +73,102 @@ def _r1_config(**overrides):
     )
     fields.update(overrides)
     return PretrainedConfig(**fields)
+
+
+_QWEN_LAYER_TYPES = [
+    layer_type
+    for _ in range(16)
+    for layer_type in ("linear_attention", "linear_attention", "linear_attention", "full_attention")
+]
+
+
+def _qwen_config(*, architecture="QwenImageBenchForConditionalGeneration", **text_overrides):
+    """The published Qwen3.8-27B dense nested configuration."""
+    text_fields = dict(
+        model_type="qwen3_5_text",
+        num_hidden_layers=64,
+        hidden_size=5120,
+        intermediate_size=17408,
+        vocab_size=248320,
+        num_attention_heads=24,
+        num_key_value_heads=4,
+        head_dim=256,
+        linear_num_key_heads=16,
+        linear_num_value_heads=48,
+        linear_key_head_dim=128,
+        linear_value_head_dim=128,
+        linear_conv_kernel_dim=4,
+        full_attention_interval=4,
+        attn_output_gate=True,
+        tie_word_embeddings=False,
+        partial_rotary_factor=0.25,
+        rope_parameters=dict(
+            rope_theta=10_000_000,
+            partial_rotary_factor=0.25,
+            mrope_section=[11, 11, 10],
+            mrope_interleaved=True,
+        ),
+        layer_types=list(_QWEN_LAYER_TYPES),
+    )
+    text_fields.update(text_overrides)
+    return PretrainedConfig(
+        architectures=[architecture],
+        model_type="qwen3_5",
+        language_model_only=False,
+        tie_word_embeddings=False,
+        text_config=PretrainedConfig(**text_fields),
+    )
+
+
+def _qwen_quant_config_dict():
+    configs = {}
+    for layer_idx, layer_type in enumerate(_QWEN_LAYER_TYPES):
+        prefix = f"model.language_model.layers.{layer_idx}"
+        for projection in ("gate_proj", "up_proj", "down_proj"):
+            configs[f"{prefix}.mlp.{projection}"] = QuantConfig(
+                quant_algo=QuantAlgo.NVFP4, group_size=16
+            )
+        projections = (
+            ("in_proj_qkv", "in_proj_z", "out_proj")
+            if layer_type == "linear_attention"
+            else ("q_proj", "k_proj", "v_proj", "o_proj")
+        )
+        module = "linear_attn" if layer_type == "linear_attention" else "self_attn"
+        for projection in projections:
+            configs[f"{prefix}.{module}.{projection}"] = QuantConfig(quant_algo=QuantAlgo.FP8)
+    configs["lm_head"] = QuantConfig(quant_algo=QuantAlgo.NVFP4, group_size=16)
+    return configs
+
+
+def _qwen_model_config(
+    pretrained_config=None,
+    *,
+    disable_mm_encoder=True,
+    quant_config_dict=None,
+    **mapping_kwargs,
+):
+    return ModelConfig(
+        pretrained_config=pretrained_config or _qwen_config(),
+        mapping=Mapping(**mapping_kwargs) if mapping_kwargs else Mapping(),
+        quant_config=QuantConfig(quant_algo=QuantAlgo.MIXED_PRECISION),
+        quant_config_dict=(
+            _qwen_quant_config_dict() if quant_config_dict is None else quant_config_dict
+        ),
+        disable_mm_encoder=disable_mm_encoder,
+    )
+
+
+def _qwen_inner_model_config():
+    outer = _qwen_config()
+    inner = outer.text_config
+    inner.architectures = ["Qwen3_5ForCausalLM"]
+    return ModelConfig(
+        pretrained_config=inner,
+        mapping=Mapping(),
+        quant_config=QuantConfig(quant_algo=QuantAlgo.MIXED_PRECISION),
+        quant_config_dict=_qwen_quant_config_dict(),
+        disable_mm_encoder=True,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -130,6 +228,71 @@ def test_r1_dep4_matches(monkeypatch, mode):
     _set_mode(monkeypatch, mode)
     config = _model_config(_r1_config(), **_DEP4)
     assert modeling_v2_resolve(config) == "ModelingV2DeepseekR10528Nvfp4Sm103Dep4"
+
+
+@pytest.mark.parametrize("mode", ["auto", "require"])
+def test_qwen3_8_27b_nvfp4_tp1_matches(monkeypatch, mode):
+    _set_mode(monkeypatch, mode)
+    assert modeling_v2_resolve(_qwen_model_config()) == "ModelingV2Qwen3827BNvfp4Sm103Tp1"
+
+
+def test_qwen3_8_resolving_registers_external_target():
+    name = modeling_v2_resolve(_qwen_model_config())
+    cls = get_registered_model_class(name)
+    assert cls is not None
+    assert cls.__name__ == name
+    assert cls.__module__.endswith(
+        "modeling_v2.models.qwen3_5.targets.qwen3_8_27b_nvfp4.sm_103.tp1.modeling"
+    )
+    assert not _is_builtin_model_class(cls)
+
+
+def test_qwen3_8_resolve_class_rewrites_architecture_end_to_end():
+    resolved = AutoModelForCausalLM._resolve_class(_qwen_model_config())
+    assert resolved.__name__ == "ModelingV2Qwen3827BNvfp4Sm103Tp1"
+
+
+@pytest.mark.parametrize("mode", ["auto", "require"])
+def test_qwen3_8_delegated_inner_decoder_has_exact_target(monkeypatch, mode):
+    _set_mode(monkeypatch, mode)
+    name = modeling_v2_resolve(_qwen_inner_model_config())
+    assert name == "ModelingV2Qwen3827BNvfp4TextSm103Tp1"
+    cls = get_registered_model_class(name)
+    assert cls is not None
+    assert cls.__name__ == name
+    assert not _is_builtin_model_class(cls)
+
+
+@pytest.mark.parametrize(
+    ("near_miss", "criterion"),
+    [
+        ("shape", "shape"),
+        ("layers", "layers"),
+        ("quant", "quant"),
+        ("text_only", "text_only"),
+        ("parallel", "parallel"),
+    ],
+)
+def test_qwen3_8_near_misses_do_not_match(monkeypatch, near_miss, criterion):
+    if near_miss == "shape":
+        config = _qwen_model_config(_qwen_config(hidden_size=4096))
+    elif near_miss == "layers":
+        layer_types = list(_QWEN_LAYER_TYPES)
+        layer_types[0] = "full_attention"
+        config = _qwen_model_config(_qwen_config(layer_types=layer_types))
+    elif near_miss == "quant":
+        quant_config_dict = _qwen_quant_config_dict()
+        quant_config_dict.pop("lm_head")
+        config = _qwen_model_config(quant_config_dict=quant_config_dict)
+    elif near_miss == "text_only":
+        config = _qwen_model_config(disable_mm_encoder=False)
+    else:
+        config = _qwen_model_config(world_size=2, tp_size=2)
+
+    assert modeling_v2_resolve(config) is None
+    _set_mode(monkeypatch, "require")
+    with pytest.raises(ValueError, match=criterion):
+        modeling_v2_resolve(config)
 
 
 def test_resolving_registers_the_target_class():
