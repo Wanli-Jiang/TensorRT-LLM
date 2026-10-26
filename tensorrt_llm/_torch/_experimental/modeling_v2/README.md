@@ -153,7 +153,7 @@ shows exactly what the kernel receives; `catalog/_op.py` states the rest.
 
 Kimi K3's native code, its one-shot MNNVL specialization and fused
 attention-residual decode kernels, is family-shared code of its family library:
-`cpp/tensorrt_llm/modeling_v2/kimiK3Vl/shared/`, ops in
+`models/kimi_k3_vl/csrc/`, ops in
 `torch.ops.mv2_kimi_k3_vl`, fakes in `models/kimi_k3_vl/fake_ops.py`. It calls
 the generic attention-residual, persistent fallback and two-shot MNNVL kernels,
 which remain stock, through the headers listed in

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/mnnvlAllGatherKernels.h"
+#include "kimi_k3_vl/csrc/mnnvlAllGatherKernels.h"
 
 #include "tensorrt_llm/common/cudaUtils.h"
 #include "tensorrt_llm/common/envUtils.h"

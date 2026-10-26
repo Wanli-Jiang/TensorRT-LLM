@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
+#include "kimi_k3_vl/csrc/mnnvlAllGatherKernels.h"
+#include "kimi_k3_vl/csrc/mnnvlAllreduceAttnRes.h"
 #include "tensorrt_llm/common/mcastDevMemUtils.h"
 #include "tensorrt_llm/common/tllmDataType.h"
 #include "tensorrt_llm/kernels/communicationKernels/mnnvlAllreduceKernels.h"
 #include "tensorrt_llm/modeling_v2/common/torchLibrary.h"
-#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/mnnvlAllGatherKernels.h"
-#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/mnnvlAllreduceAttnRes.h"
 #include "tensorrt_llm/runtime/mcastDeviceMemory.h"
 
 #include <ATen/cuda/CUDAContext.h>

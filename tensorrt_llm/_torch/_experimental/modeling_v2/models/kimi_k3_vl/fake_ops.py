@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fake (meta) implementations of the Kimi K3 family's shared native ops.
 
-The ops are built from ``cpp/tensorrt_llm/modeling_v2/kimiK3Vl/shared/`` into
+The ops are built from this family's ``csrc/`` into
 ``libth_modeling_v2_kimi_k3_vl.so`` and registered in ``torch.ops.mv2_kimi_k3_vl``.
 The loader imports this module right after it opens that library, so a fake for
 an op the library does not define fails the load.

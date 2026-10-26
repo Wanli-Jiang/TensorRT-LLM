@@ -17,17 +17,18 @@
 
 # Kimi K3 (kimi_k3_vl). Both targets run the same native code: the
 # attention-residual decode kernels and the MNNVL collectives specialized for
-# K3's decode chain, built once in shared/ and registered in mv2_kimi_k3_vl.
+# K3's decode chain, built once from this directory and registered in
+# mv2_kimi_k3_vl.
 add_modeling_v2_family(kimi_k3_vl)
 
 add_modeling_v2_shared(
   kimi_k3_vl
   ARCHS 100f
-  SOURCES kernels/*.cu ops/*.cpp
+  SOURCES *.cu *.cpp
   DEPS nccl
   REQUIRES MULTI_DEVICE)
-set_source_files_properties(shared/kernels/k3AttnResDecode.cu
-                            PROPERTIES COMPILE_OPTIONS --use_fast_math)
+set_source_files_properties(k3AttnResDecode.cu PROPERTIES COMPILE_OPTIONS
+                                                          --use_fast_math)
 
 add_modeling_v2_target(kimi_k3_vl kimi_k3_mxfp4__sm_100__tp16_moetp4ep4
                        ARCHS 100f)

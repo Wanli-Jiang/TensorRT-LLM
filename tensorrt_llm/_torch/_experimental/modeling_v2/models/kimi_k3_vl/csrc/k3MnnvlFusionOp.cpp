@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "kimi_k3_vl/csrc/k3MnnvlAllreduce.h"
 #include "tensorrt_llm/common/mcastDevMemUtils.h"
 #include "tensorrt_llm/kernels/customAllReduceKernels.h"
 #include "tensorrt_llm/kernels/quantization.h"
 #include "tensorrt_llm/modeling_v2/common/torchLibrary.h"
-#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/k3MnnvlAllreduce.h"
 #include "tensorrt_llm/runtime/mcastDeviceMemory.h"
 #include "tensorrt_llm/runtime/torchUtils.h"
 #include "tensorrt_llm/thop/thUtils.h"
