@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "k3MnnvlAllreduce.h"
 #include "tensorrt_llm/common/mcastDevMemUtils.h"
 #include "tensorrt_llm/kernels/customAllReduceKernels.h"
 #include "tensorrt_llm/kernels/quantization.h"
+#include "tensorrt_llm/modeling_v2/common/torchLibrary.h"
+#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/k3MnnvlAllreduce.h"
 #include "tensorrt_llm/runtime/mcastDeviceMemory.h"
 #include "tensorrt_llm/runtime/torchUtils.h"
 #include "tensorrt_llm/thop/thUtils.h"
@@ -77,7 +78,7 @@ bool hasMnnvlNormOutput(AllReduceFusionOp fusionOp)
         || fusionOp == AllReduceFusionOp::RESIDUAL_RMS_NORM_OUT_QUANT_NVFP4;
 }
 
-}
+} // namespace
 
 std::vector<torch::Tensor> k3MnnvlFusionAllReduce(torch::Tensor& input, torch::optional<torch::Tensor> const& gamma,
     torch::optional<torch::Tensor> const& residual_in, torch::optional<double> epsilon, torch::Tensor& comm_buffer,
@@ -242,11 +243,11 @@ std::vector<torch::Tensor> k3MnnvlFusionAllReduce(torch::Tensor& input, torch::o
     return {};
 }
 
-}
+} // namespace torch_ext
 
 TRTLLM_NAMESPACE_END
 
-TORCH_LIBRARY_FRAGMENT(trtllm, m)
+TRTLLM_MV2_LIBRARY_FRAGMENT(m)
 {
     m.def(
         "k3_mnnvl_fusion_allreduce(Tensor input, Tensor? gamma, Tensor? residual, "
@@ -254,7 +255,7 @@ TORCH_LIBRARY_FRAGMENT(trtllm, m)
         "Tensor? scale=None, int fusion_op=0, int one_shot_max_bytes=1048576, bool early_trigger=False) -> Tensor[]");
 }
 
-TORCH_LIBRARY_IMPL(trtllm, CUDA, m)
+TRTLLM_MV2_LIBRARY_IMPL(CUDA, m)
 {
     m.impl("k3_mnnvl_fusion_allreduce", &tensorrt_llm::torch_ext::k3MnnvlFusionAllReduce);
 }

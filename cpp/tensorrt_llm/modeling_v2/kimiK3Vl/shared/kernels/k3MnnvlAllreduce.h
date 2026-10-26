@@ -30,6 +30,6 @@ struct AllReduceFusionParams : mnnvl::AllReduceFusionParams
 
 void oneshotAllreduceFusionOp(AllReduceFusionParams const& params);
 
-}
+} // namespace kernels::kimiK3MnnvlOneShot
 
 TRTLLM_NAMESPACE_END

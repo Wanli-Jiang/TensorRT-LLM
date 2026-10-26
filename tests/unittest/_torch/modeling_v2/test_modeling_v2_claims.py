@@ -140,6 +140,7 @@ def test_targets_do_not_share_files():
                 f"{_modeling_v2.__name__}.models.{target_dir.parent.name}.{target_dir.name}"
             )
             family_kernels = f"{_modeling_v2.__name__}.models.{target_dir.parent.name}.kernels"
+            native_loader = f"{_modeling_v2.__name__}._native"
             for source_file in target_dir.rglob("*.py"):
                 package = ".".join(
                     (_modeling_v2.__name__, *source_file.parent.relative_to(_ROOT).parts)
@@ -165,6 +166,7 @@ def test_targets_do_not_share_files():
                             or _is_entry_module(module, target_dir)
                             or module == family_kernels
                             or module.startswith(family_kernels + ".")
+                            or module.startswith(native_loader + ".")
                         ), (
                             f"{name}: {source_file.relative_to(target_dir)} imports non-owned model code {module}"
                         )
@@ -180,6 +182,7 @@ def test_targets_do_not_share_files():
         ("modeling.py", "from ..sibling.ops.attention.entry import op", False),
         ("modeling.py", "from ...other.ops.attention.entry import op", False),
         ("modeling.py", "from ..helper import op", False),
+        ("modeling.py", "from ...._native import load_family_ops", True),
         ("modeling.py", "from {package}.models.family.ops.attention.entry import op", True),
         ("modeling.py", "from {package}.models.family.target.ops.attention.entry import op", True),
         ("modeling.py", "import {package}.models.family.sibling.ops.attention.entry", False),

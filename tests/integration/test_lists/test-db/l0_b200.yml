@@ -162,6 +162,9 @@ l0_b200:
   - unittest/_torch/modules/kimi_kda/test_kda_decode_op.py
   - unittest/_torch/modules/kimi_kda/test_kimi_kda_decode_state_parity.py
   - unittest/_torch/modules/kimi_kda/test_kda_prefill_state_parity.py
+  # The Kimi K3 family library (libth_modeling_v2_kimi_k3_vl.so): the family's own entry, which CBTS selects
+  # for a change confined to the family.
+  - unittest/_torch/modeling_v2/models/kimi_k3_vl
   # Kimi K3's generic path (prefill, mixed and wide steps) in the modeling_v2 catalog: its own entries
   # and the sm_100 cells of the shared entries it calls.
   - unittest/_torch/modeling_v2/norm/test_modeling_v2_rms_norm_gated_token_major.py

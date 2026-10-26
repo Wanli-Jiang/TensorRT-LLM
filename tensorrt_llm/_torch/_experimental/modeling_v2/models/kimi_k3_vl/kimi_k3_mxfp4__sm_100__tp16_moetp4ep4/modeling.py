@@ -149,6 +149,7 @@ from tensorrt_llm.logger import logger
 from tensorrt_llm.mapping import Mapping
 from tensorrt_llm.models.modeling_utils import QuantAlgo, QuantConfig
 
+from ...._native import load_family_ops
 from . import decode_comm as _decode_comm
 from . import decode_gemv as _decode_gemv
 from . import decode_moe as _decode_moe
@@ -168,10 +169,10 @@ _SM = (10, 0)
 #: Every trtllm op this target reaches for, in its forward and in the weight load. Declared here, asserted in
 #: tests/unittest/_torch/modeling_v2: the K3-specific ops of the generic path (attention residuals, KDA, the router
 #: and fused-A GEMMs), then the decode kernels'.
+#: The family library's own ops (mv2_kimi_k3_vl) are not listed: the target loads only if the library
+#: carries it, and fake_ops.py, imported when the library opens, fails the load if one is missing.
 REQUIRED_TRTLLM_OPS = (
     "attn_res_fwd",
-    "k3_attn_res_rmsnorm_fwd",
-    "k3_attn_res_add_rmsnorm_fwd",
     "attn_res_add_rmsnorm_persistent_fwd",
     "kda_prefill",
     "kda_decode",
@@ -192,21 +193,18 @@ REQUIRED_TRTLLM_OPS = (
     "k3_embed_norm",
     "allgather",
     # The decode path's collectives (decode_comm.py) and MoE (decode_moe.py).
-    "mnnvl_allreduce_attn_res",
     "k3_sandwich_oproj",
     "k3_sandwich_tail",
     "k3_moe_front",
     "k3_moe",
     "k3_latent_reduce",
     "k3_route_quant",
-    "mnnvl_allgather_split",
     # The DSpark drafter's decode path (K3DSparkDrafter): its GEMV sites, its block attention, and its all-reduces
     # with the residual add and RMSNorm (the split context projection's with hidden_norm).
     "k3_ctm_gemv",
     "k3_ctm_gemv_swiglu",
     "k3_drafter_attn_qknorm",
     "k3_sandwich_plain",
-    "k3_mnnvl_fusion_allreduce",
 )
 
 #: The engine surface the first forward checks before this target relies on it: per object, the attributes read.
@@ -640,10 +638,7 @@ def _apply_attn_res_rmsnorm_fused(
     if M > max_fused_tokens or H != 7168 or N > 12:
         _note_attn_res_fusion("attn_res+norm", False, M, H, N)
         return None
-    try:
-        attn_res_rmsnorm_op = torch.ops.trtllm.k3_attn_res_rmsnorm_fwd
-    except (AttributeError, RuntimeError):
-        return None
+    attn_res_rmsnorm_op = load_family_ops(__name__).k3_attn_res_rmsnorm_fwd
     layer_kernel = prefix_sum.reshape(M, 1, H).contiguous()
     block_kernel = block_residual.reshape(K, M, 1, H).contiguous()
     output = attn_res_rmsnorm_op(
@@ -714,10 +709,7 @@ def _apply_attn_res_add_rmsnorm_fused(
     if M > max_fused_tokens or H != 7168 or N > 12:
         _note_attn_res_fusion("add+attn_res+norm", False, M, H, N)
         return None
-    try:
-        attn_res_add_rmsnorm_op = torch.ops.trtllm.k3_attn_res_add_rmsnorm_fwd
-    except (AttributeError, RuntimeError):
-        return None
+    attn_res_add_rmsnorm_op = load_family_ops(__name__).k3_attn_res_add_rmsnorm_fwd
     layer_kernel = prefix_sum.reshape(M, 1, H).contiguous()
     addend_kernel = addend.reshape(M, 1, H).contiguous()
     block_kernel = block_residual.reshape(K, M, 1, H).contiguous()

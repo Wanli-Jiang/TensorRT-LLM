@@ -8,10 +8,14 @@
 #
 # Adding a header widens what stock changes can affect modeling_v2 targets;
 # it is reviewed by the stock owners of that header.
-tensorrt_llm/common/*.h
 tensorrt_llm/common/*.cuh
+tensorrt_llm/common/*.h
+tensorrt_llm/kernels/communicationKernels/mnnvlAllreduceKernels.h
+tensorrt_llm/kernels/customAllReduceKernels.h
+tensorrt_llm/kernels/kimiK3AttnRes/attnResFwd.h
 tensorrt_llm/kernels/kvCacheUtils.h
 tensorrt_llm/kernels/quantization.cuh
 tensorrt_llm/kernels/quantization.h
 tensorrt_llm/runtime/mcastDeviceMemory.h
+tensorrt_llm/runtime/torchUtils.h
 tensorrt_llm/thop/thUtils.h
