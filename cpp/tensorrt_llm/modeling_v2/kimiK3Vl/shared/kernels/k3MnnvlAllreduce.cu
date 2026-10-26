@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "k3MnnvlAllreduce.h"
 #include "tensorrt_llm/common/config.h"
+#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/k3MnnvlAllreduce.h"
 #include <cooperative_groups.h>
 #include <cstddef>
 #include <cstdint>
@@ -525,7 +525,7 @@ inline __device__ void writeEpilogueOutput(PackedVec<PackedType, T> const& value
     }
 }
 
-}
+} // namespace detail
 
 using detail::PackedVec;
 using detail::loadPacked;
@@ -824,6 +824,6 @@ void oneshotAllreduceFusionOp(AllReduceFusionParams const& params)
     }
 }
 
-}
+} // namespace kernels::kimiK3MnnvlOneShot
 
 TRTLLM_NAMESPACE_END

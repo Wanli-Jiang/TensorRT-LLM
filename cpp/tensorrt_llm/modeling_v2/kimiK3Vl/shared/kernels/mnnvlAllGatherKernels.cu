@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "mnnvlAllGatherKernels.h"
+#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/mnnvlAllGatherKernels.h"
 
 #include "tensorrt_llm/common/cudaUtils.h"
 #include "tensorrt_llm/common/envUtils.h"
@@ -131,7 +131,7 @@ __global__ void __launch_bounds__(kThreads) mnnvlAllGatherSplitKernel(AllGatherS
     flag.waitAndUpdate({static_cast<uint32_t>(p.numTokens * p.nRanks * vectors * sizeof(uint4)), 0, 0, 0});
 }
 
-}
+} // namespace
 
 int64_t mnnvlAllGatherSplitFootprint(int numTokens, int bf16Columns, int fp32Columns, int nRanks)
 {
@@ -155,6 +155,6 @@ void mnnvlAllGatherSplitOp(AllGatherSplitParams const& params)
     TLLM_CUDA_CHECK(cudaLaunchKernelEx(&config, mnnvlAllGatherSplitKernel, params));
 }
 
-}
+} // namespace kernels::kimiK3Mnnvl
 
 TRTLLM_NAMESPACE_END

@@ -48,6 +48,6 @@ int64_t mnnvlAllGatherSplitFootprint(int numTokens, int bf16Columns, int fp32Col
 
 void mnnvlAllGatherSplitOp(AllGatherSplitParams const& params);
 
-}
+} // namespace kernels::kimiK3Mnnvl
 
 TRTLLM_NAMESPACE_END

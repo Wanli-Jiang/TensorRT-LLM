@@ -118,7 +118,6 @@ models/<family>/
   routing.py        one forward-reading decision tree per architecture family
   ops/<category>/   entries shared only by this family's targets
   kernels/          CuTe DSL packages shared only by this family's targets
-  csrc/             model-owned compiled specializations and native op bridges
   fake_ops.py       fakes of the family's shared native ops, if it has any
   csrc/             the family's CMakeLists.txt and the native code its targets share
   <checkpoint>__<gpu arch>__<parallel>/
@@ -152,12 +151,13 @@ torch, `is_valid` names the inputs it accepts and answers wrongly, and `CELLS`
 wrapper is stateless and `__call__` reads nothing off `self`, so a call site
 shows exactly what the kernel receives; `catalog/_op.py` states the rest.
 
-Kimi K3's `csrc/` is compiled into the existing native libraries through CMake
-OBJECT targets and `target_sources`; it has no runtime extension loader. Its
-one-shot MNNVL specialization and fused attention-residual decode kernels are
-family-owned. The generic attention-residual, persistent fallback and two-shot
-MNNVL kernels remain stock, as do the shared native schemas and workspace
-ownership. Rebuild the native libraries when these model-owned sources change.
+Kimi K3's native code, its one-shot MNNVL specialization and fused
+attention-residual decode kernels, is family-shared code of its family library:
+`cpp/tensorrt_llm/modeling_v2/kimiK3Vl/shared/`, ops in
+`torch.ops.mv2_kimi_k3_vl`, fakes in `models/kimi_k3_vl/fake_ops.py`. It calls
+the generic attention-residual, persistent fallback and two-shot MNNVL kernels,
+which remain stock, through the headers listed in
+`cpp/tensorrt_llm/modeling_v2/contractSurface.txt`.
 
 K3's all-reduce adapter keeps its one-shot ceiling and entry-release setting on
 the selected model's modules. Stock PDL releases after rank reduction; K3 can

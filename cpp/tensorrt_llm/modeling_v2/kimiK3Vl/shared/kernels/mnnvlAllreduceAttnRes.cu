@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "mnnvlAllreduceAttnRes.h"
 #include "tensorrt_llm/common/config.h"
+#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/mnnvlAllreduceAttnRes.h"
 #include <cfloat>
 #include <cooperative_groups.h>
 #include <cstddef>
@@ -343,7 +343,7 @@ constexpr int kAttnResEltsPerThread = 8;
 constexpr int kAttnResEltsPerCta = kAttnResThreads * kAttnResEltsPerThread;
 constexpr int kAttnResMaxClusterSize = 8;
 constexpr int kAttnResMaxCandidates = 12;
-}
+} // namespace detail
 
 using detail::PackedVec;
 using detail::loadPacked;
@@ -630,7 +630,7 @@ void dispatchOneshotAllreduceAttnRes(cudaLaunchConfig_t const& config,
         epilogue.numCandidates, detail::kAttnResMaxCandidates);
 }
 
-}
+} // namespace
 
 void oneshotAllreduceAttnResOp(AllReduceFusionParams const& params, AttnResEpilogueParams const& epilogue)
 {
@@ -681,6 +681,6 @@ void oneshotAllreduceAttnResOp(AllReduceFusionParams const& params, AttnResEpilo
             false, "[MNNVL AllReduceAttnRes] unsupported world size %d (2, 4, 8 or 16).", params.nRanks);
     }
 }
-}
+} // namespace kernels::kimiK3Mnnvl
 
 TRTLLM_NAMESPACE_END

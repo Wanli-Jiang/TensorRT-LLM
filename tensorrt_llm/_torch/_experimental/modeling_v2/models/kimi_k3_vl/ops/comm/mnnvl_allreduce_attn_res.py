@@ -8,6 +8,7 @@ from typing import Optional, Sequence, Tuple
 import torch
 
 import tensorrt_llm._torch.custom_ops  # noqa: F401 — registers torch.ops.trtllm.*
+from tensorrt_llm._torch._experimental.modeling_v2._native import load_family_ops
 from tensorrt_llm._torch._experimental.modeling_v2.catalog._op import Arch, Cell, OpWrapper
 
 from .mnnvl_workspace import MnnvlWorkspace
@@ -140,7 +141,7 @@ class MnnvlAllreduceAttnRes(OpWrapper):
         output_rms_eps: float,
         workspace: MnnvlWorkspace,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        normed, updated = torch.ops.trtllm.mnnvl_allreduce_attn_res(
+        normed, updated = load_family_ops(__name__).mnnvl_allreduce_attn_res(
             input,
             prefix_sum,
             block_residual,

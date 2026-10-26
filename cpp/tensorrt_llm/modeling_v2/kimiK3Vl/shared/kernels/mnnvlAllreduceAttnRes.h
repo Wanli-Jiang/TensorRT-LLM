@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2025-2026, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,24 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
-#include "tensorrt_llm/kernels/kimiK3AttnRes/attnResFwd.h"
+#include "tensorrt_llm/common/config.h"
+#include "tensorrt_llm/kernels/communicationKernels/mnnvlAllreduceKernels.h"
 
 TRTLLM_NAMESPACE_BEGIN
 
-namespace kernels::kimiK3DecodeAttnRes
+namespace kernels::kimiK3Mnnvl
 {
 
-struct AttnResFwdParams : kimiK3AttnRes::AttnResFwdParams
+struct AttnResEpilogueParams
 {
-    bool earlyTrigger = false;
+    void const* blockResidual;
+    void const* resWeight;
+    void const* rmsWeight;
+    void const* outputRmsWeight;
+    float rmsEps;
+    float outputRmsEps;
+    int numCandidates;
 };
 
-void invokeAttnResRmsNormFwd(AttnResFwdParams const& params, cudaStream_t stream);
-void invokeAttnResAddRmsNormFwd(AttnResFwdParams const& params, cudaStream_t stream);
+void oneshotAllreduceAttnResOp(mnnvl::AllReduceFusionParams const& params, AttnResEpilogueParams const& epilogue);
 
-}
+} // namespace kernels::kimiK3Mnnvl
 
 TRTLLM_NAMESPACE_END

@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "k3AttnResDecode.h"
 #include "tensorrt_llm/common/cudaUtils.h"
 #include "tensorrt_llm/common/envUtils.h"
+#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/k3AttnResDecode.h"
 
 #include <cfloat>
 #include <cooperative_groups.h>
@@ -708,9 +708,9 @@ static void launch_s1_splitk(bf16_t const* block_residual, bf16_t const* layer_r
     cudaLaunchKernelExC(&config, reinterpret_cast<void const*>(kernel), args);
 }
 
-}
+} // namespace sm100::fwd_prod_v2
 
-}
+} // namespace
 
 TRTLLM_NAMESPACE_BEGIN
 
@@ -776,6 +776,6 @@ void invokeAttnResAddRmsNormFwd(AttnResFwdParams const& params, cudaStream_t str
     invokeAttnResDecodeRmsNorm<true>(params, stream);
 }
 
-}
+} // namespace kernels::kimiK3DecodeAttnRes
 
 TRTLLM_NAMESPACE_END

@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-#include "mnnvlAllGatherKernels.h"
-#include "mnnvlAllreduceAttnRes.h"
 #include "tensorrt_llm/common/mcastDevMemUtils.h"
 #include "tensorrt_llm/common/tllmDataType.h"
 #include "tensorrt_llm/kernels/communicationKernels/mnnvlAllreduceKernels.h"
+#include "tensorrt_llm/modeling_v2/common/torchLibrary.h"
+#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/mnnvlAllGatherKernels.h"
+#include "tensorrt_llm/modeling_v2/kimiK3Vl/shared/kernels/mnnvlAllreduceAttnRes.h"
 #include "tensorrt_llm/runtime/mcastDeviceMemory.h"
 
 #include <ATen/cuda/CUDAContext.h>
@@ -150,7 +151,7 @@ tensorrt_llm::kernels::kimiK3Mnnvl::AllGatherSplitParams makeAllGatherSplitParam
     return params;
 }
 
-}
+} // namespace
 
 std::vector<torch::Tensor> mnnvlAllGatherSplit(torch::Tensor const& input, int64_t bf16_columns, int64_t world_size,
     torch::Tensor& comm_buffer, torch::Tensor& buffer_flags)
@@ -163,11 +164,11 @@ std::vector<torch::Tensor> mnnvlAllGatherSplit(torch::Tensor const& input, int64
     return {bf16Out, fp32Out};
 }
 
-}
+} // namespace torch_ext
 
 TRTLLM_NAMESPACE_END
 
-TORCH_LIBRARY_FRAGMENT(trtllm, m)
+TRTLLM_MV2_LIBRARY_FRAGMENT(m)
 {
     m.def(
         "mnnvl_allreduce_attn_res(Tensor input, Tensor? prefix_sum, Tensor block_residual, Tensor res_weight, "
@@ -178,7 +179,7 @@ TORCH_LIBRARY_FRAGMENT(trtllm, m)
         "Tensor(b!) buffer_flags) -> Tensor[]");
 }
 
-TORCH_LIBRARY_IMPL(trtllm, CUDA, m)
+TRTLLM_MV2_LIBRARY_IMPL(CUDA, m)
 {
     m.impl("mnnvl_allreduce_attn_res", &tensorrt_llm::torch_ext::mnnvlAllReduceAttnRes);
     m.impl("mnnvl_allgather_split", &tensorrt_llm::torch_ext::mnnvlAllGatherSplit);

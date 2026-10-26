@@ -17,12 +17,15 @@ import zlib
 import pytest
 import torch
 
+from tensorrt_llm._torch._experimental.modeling_v2._native import load_family_ops
 from tensorrt_llm._torch._experimental.modeling_v2.models.kimi_k3_vl.ops.norm.attn_res_rmsnorm_fwd import (
     attn_res_rmsnorm_fwd,
 )
 
 __extra_import_path__ = [".."]
 from _validating import validating
+
+_KIMI_K3 = "tensorrt_llm._torch._experimental.modeling_v2.models.kimi_k3_vl"
 
 assert torch.cuda.is_available(), "attn_res_rmsnorm_fwd requires a CUDA device"
 # The receipts are sm_100 ones; CI's other architectures skip this file.
@@ -154,7 +157,7 @@ def test_k3_fused_add_preserves_rounding_and_graph_inputs(
     layer, block, res_weight, rms_weight, output_weight = inputs
     addend = layer.roll(1, dims=-1) * 0.25
     args = (layer, addend, block, res_weight, rms_weight, output_weight, RMS_EPS, RMS_EPS)
-    updated, normalized = torch.ops.trtllm.k3_attn_res_add_rmsnorm_fwd(
+    updated, normalized = load_family_ops(_KIMI_K3).k3_attn_res_add_rmsnorm_fwd(
         *args, early_trigger=early_trigger
     )
     for replay in (False, True):
@@ -162,7 +165,7 @@ def test_k3_fused_add_preserves_rounding_and_graph_inputs(
             torch.cuda.synchronize()
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph):
-                updated, normalized = torch.ops.trtllm.k3_attn_res_add_rmsnorm_fwd(
+                updated, normalized = load_family_ops(_KIMI_K3).k3_attn_res_add_rmsnorm_fwd(
                     *args, early_trigger=early_trigger
                 )
             layer.copy_(layer.roll(3, dims=-1))
