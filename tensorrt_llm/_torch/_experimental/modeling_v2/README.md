@@ -153,11 +153,10 @@ shows exactly what the kernel receives; `catalog/_op.py` states the rest.
 
 Kimi K3's native code, its one-shot MNNVL specialization and fused
 attention-residual decode kernels, is family-shared code of its family library:
-`models/kimi_k3_vl/csrc/`, ops in
-`torch.ops.mv2_kimi_k3_vl`, fakes in `models/kimi_k3_vl/fake_ops.py`. It calls
-the generic attention-residual, persistent fallback and two-shot MNNVL kernels,
-which remain stock, through the headers listed in
-`cpp/tensorrt_llm/modeling_v2/contractSurface.txt`.
+`models/kimi_k3_vl/csrc/`, ops in `torch.ops.mv2_kimi_k3_vl`, fakes in
+`models/kimi_k3_vl/fake_ops.py`. It calls the generic attention-residual,
+persistent fallback and two-shot MNNVL kernels, which remain stock, through
+their stock headers.
 
 K3's all-reduce adapter keeps its one-shot ceiling and entry-release setting on
 the selected model's modules. Stock PDL releases after rank reduction; K3 can
