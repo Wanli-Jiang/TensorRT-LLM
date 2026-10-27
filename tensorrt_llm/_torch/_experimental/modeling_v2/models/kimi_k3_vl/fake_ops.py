@@ -13,9 +13,9 @@ from typing import Tuple
 import torch
 
 import tensorrt_llm.quantization.utils.fp4_utils as fp4_utils
-from tensorrt_llm._torch._experimental.modeling_v2._native import family_of, torch_namespace
+from tensorrt_llm._torch._experimental.modeling_v2._native import namespace_of
 
-_NS = torch_namespace(family_of(__name__))
+_NS = namespace_of(__name__)
 
 
 @torch.library.register_fake(f"{_NS}::k3_mnnvl_fusion_allreduce")

@@ -14,11 +14,8 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from tensorrt_llm._torch._experimental.modeling_v2._native import (
-    load_family_library,
-    load_family_ops,
-    torch_namespace,
-)
+from tensorrt_llm._torch._experimental.modeling_v2 import _native
+from tensorrt_llm._torch._experimental.modeling_v2._native import load_family_ops, namespace_of
 
 _FAMILY = "kimi_k3_vl"
 _PACKAGE = f"tensorrt_llm._torch._experimental.modeling_v2.models.{_FAMILY}"
@@ -40,12 +37,12 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("target", _TARGETS)
 def test_each_target_loads_the_family_library(target):
     importlib.import_module(f"{_PACKAGE}.{target}")
-    assert set(_TARGETS) <= load_family_library(_FAMILY)
+    assert set(_TARGETS) <= _native._load_family_library(_FAMILY)
 
 
 def test_the_library_defines_every_shared_op():
     load_family_ops(_PACKAGE)
-    prefix = f"{torch_namespace(_FAMILY)}::"
+    prefix = f"{namespace_of(_PACKAGE)}::"
     defined = {
         s.name[len(prefix) :] for s in torch._C._jit_get_all_schemas() if s.name.startswith(prefix)
     }
