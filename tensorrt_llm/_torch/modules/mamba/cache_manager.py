@@ -23,6 +23,7 @@ from tensorrt_llm._torch.pyexecutor.kv_cache.mamba_cache_manager.common import (
     MambaStateLayout,
     _promote_intermediate_states,
     _stack_state_views,
+    _try_promote_replay_conv,
 )
 from tensorrt_llm._torch.pyexecutor.kv_cache.mamba_cache_manager.mamba_cache_manager_v2 import (
     MambaHybridCacheManagerV2,
@@ -400,6 +401,8 @@ class ReplayHistory:
         metadata = self.get_replay_metadata()
         if metadata is None:
             raise RuntimeError("Mamba2 replay buffers are not bound")
+        if _try_promote_replay_conv(self._stacked_conv, self.intermediate_conv, batch, metadata):
+            return
         _advance_replay_state(
             metadata,
             batch.destination_state_indices,

@@ -738,3 +738,38 @@ def _promote_intermediate_states(
             batch.accepted_positions,
             batch.destination_state_indices,
         )
+
+
+def _try_promote_replay_conv(
+    stacked: torch.Tensor | None,
+    intermediate: torch.Tensor,
+    batch: MambaAcceptanceBatch,
+    metadata,
+) -> bool:
+    """Promote accepted conv positions and advance replay counters in one graph launch."""
+    if (
+        stacked is None
+        or batch.num_generations <= 0
+        or not getattr(batch.attention_metadata, "is_cuda_graph", False)
+        or batch.is_dummy_request is None
+        or metadata.prev_num_accepted_tokens.dtype != torch.int32
+        or metadata.cache_buf_idx.dtype != torch.int32
+        or batch.is_dummy_request.dtype != torch.bool
+    ):
+        return False
+    from tensorrt_llm._torch.pyexecutor.kv_cache import mamba_cache_manager
+
+    mamba_cache_manager._promote_mamba_state_triton(
+        stacked,
+        intermediate,
+        batch.source_state_indices,
+        batch.accepted_positions,
+        batch.destination_state_indices,
+        num_accepted_tokens=batch.num_accepted_tokens,
+        replay_pnat=metadata.prev_num_accepted_tokens,
+        replay_cache_buf_idx=metadata.cache_buf_idx,
+        dummy_request_mask=batch.is_dummy_request,
+        replay_step_width=metadata.replay_step_width,
+        replay_history_size=metadata.replay_history_size,
+    )
+    return True
