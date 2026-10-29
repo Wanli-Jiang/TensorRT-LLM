@@ -1726,6 +1726,61 @@ def test_cpp_hybrid_replay_bookkeeping_is_fused_into_conv_promotion(
 
 
 @skip_no_cuda
+@pytest.mark.parametrize("num_gens", [1, 2, 5])
+@pytest.mark.parametrize("tree_positions", [False, True])
+def test_v2_graph_step_folds_replay_bookkeeping_into_conv_promotion(num_gens, tree_positions):
+    from tensorrt_llm._torch.modules.mamba.cache_manager import ReplayHistory
+    from tensorrt_llm._torch.pyexecutor.kv_cache.mamba_cache_manager.common import (
+        MambaAcceptanceBatch,
+    )
+
+    for state_class in (GDNReplayState, ReplayHistory):
+        states = []
+        for is_cuda_graph in (False, True):
+            g = torch.Generator().manual_seed(5)
+            layers, slots, width, conv_dim = 3, 12, 4, 40
+            policy = state_class(tokens_per_gen_step=width)
+            policy.prev_num_accepted_tokens = torch.randint(
+                0, MIN_REPLAY_HISTORY_SIZE, (slots,), generator=g, dtype=torch.int32
+            ).cuda()
+            policy.cache_buf_idx = torch.randint(
+                0, 2, (slots,), generator=g, dtype=torch.int32
+            ).cuda()
+            policy.intermediate_conv = torch.randn(
+                layers, num_gens, width, conv_dim, 2, generator=g
+            ).cuda()
+            policy._stacked_conv = torch.randn(layers, slots, conv_dim, 2, generator=g).cuda()
+            policy._conv_states = tuple(policy._stacked_conv)
+            policy.commit_all_layers = MagicMock()
+            destinations = torch.randperm(slots, generator=g)[:num_gens].to(torch.int32).cuda()
+            accepted = torch.randint(
+                1, width + 1, (num_gens,), generator=g, dtype=torch.int32
+            ).cuda()
+            positions = (width - accepted) if tree_positions else (accepted - 1)
+            policy.update(
+                MambaAcceptanceBatch(
+                    attention_metadata=SimpleNamespace(is_cuda_graph=is_cuda_graph),
+                    num_contexts=0,
+                    num_generations=num_gens,
+                    num_accepted_tokens=accepted,
+                    accepted_positions=positions,
+                    source_state_indices=torch.arange(num_gens, dtype=torch.int32, device="cuda"),
+                    destination_state_indices=destinations,
+                    is_dummy_request=(torch.arange(num_gens, device="cuda") % 2 == 1),
+                )
+            )
+            states.append(
+                (
+                    policy._stacked_conv.clone(),
+                    policy.prev_num_accepted_tokens.clone(),
+                    policy.cache_buf_idx.clone(),
+                )
+            )
+        for composed, folded in zip(*states):
+            assert torch.equal(composed, folded)
+
+
+@skip_no_cuda
 def test_attention_dp_dummy_has_reserved_slot_with_batch_size_one():
     mgr = _make_mgr(max_batch_size=1, max_draft_len=0, enable_attention_dp=True)
     mgr._prepare_mamba_cache_blocks([100])
