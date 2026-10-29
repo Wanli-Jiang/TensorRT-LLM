@@ -611,6 +611,7 @@ def test_overlap_offsets_follow_the_packed_prefix(
     decoder._dspark_device_windows = False
     decoder._prepare_inputs_fast_path = lambda *_args, **_kwargs: None
     decoder._can_use_steady_gen_fast_prepare = lambda *_args: False
+    decoder._steady_spec_cache = None
     decoder._new_extra_inputs = lambda: SimpleNamespace(
         add_generation_request=lambda _request: None, build=lambda *_args: {}
     )
