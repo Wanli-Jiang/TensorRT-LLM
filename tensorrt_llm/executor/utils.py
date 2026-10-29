@@ -209,8 +209,24 @@ class ProcessPoolExecutorSession(MpiSession):
         ]
         return [future.result() for future in futures]
 
-    def shutdown(self):
-        self.mpi_pool.shutdown(wait=True)
+    def _worker_processes(self) -> list:
+        # The pool drops its process table on shutdown; keep the handles so a
+        # later abort can still stop workers that have not exited.
+        processes = getattr(self.mpi_pool, "_processes", None)
+        if processes:
+            self._processes = list(processes.values())
+        return getattr(self, "_processes", [])
+
+    def shutdown(self, wait=True):
+        self._worker_processes()
+        self.mpi_pool.shutdown(wait=wait)
+
+    def abort(self):
+        # Hard-stop the worker processes (the MPI sessions call MPI_Abort here).
+        for process in self._worker_processes():
+            if process.is_alive():
+                process.kill()
+        self.mpi_pool.shutdown(wait=False, cancel_futures=True)
 
 
 class ErrorResponse(NamedTuple):
